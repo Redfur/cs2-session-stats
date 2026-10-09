@@ -23,7 +23,7 @@
 
 - [x] 4.1 Сверить все 50 пар демки `27802385` (`data/tmp/`) со страницей https://cs2.fastcup.net/matches/27802385/stats/duels (снять headless-браузером). Записать результат и объяснения расхождений в README.
 - [x] 4.2 README: описание дуэлей и API. CLAUDE.md: инвариант `result_version`, ограничение «переход в другую команду посреди карты». Проверить, что тексты соответствуют коду.
-- [ ] 4.3 `make test`, `npm run lint`, `openspec validate add-personal-duels --strict`, E2E в Docker на копии `data/`: после старта старые матчи пересчитываются, матрицы и профиль показывают дуэли.
+- [x] 4.3 `make test`, `npm run lint`, `openspec validate add-personal-duels --strict`, E2E в Docker на копии `data/`: после старта старые матчи пересчитываются, матрицы и профиль показывают дуэли.
 
 ## Workflow follow-up
 
