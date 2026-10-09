@@ -1,11 +1,134 @@
-body { font-family: system-ui, sans-serif; margin: 0 16px 32px; color: #222; background: #fff; }
-a { color: #0a58ca; }
-table { border-collapse: collapse; margin: 8px 0 16px; }
-th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: right; white-space: nowrap; }
-th:first-child, td:first-child { text-align: left; }
-.error { color: #b00020; }
-.muted { color: #777; }
-.table-wrap { overflow-x: auto; }
-.checklist { max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 4px 8px; margin: 4px 0; max-width: 480px; }
-.checklist label { display: block; }
-fieldset { margin: 8px 0; max-width: 520px; }
+@import 'tailwindcss';
+/* шрифты самохостом: вариативные woff2 с кириллицей, без запросов к внешним сайтам */
+@import '@fontsource-variable/manrope';
+@import '@fontsource-variable/jetbrains-mono';
+
+/* Токены дизайн-системы (Claude Design, доска «02 Отступы, радиусы, тени, @theme»). */
+@theme {
+  --font-sans: 'Manrope Variable', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  /* фон и поверхности */
+  --color-bg: #0d0f13;
+  --color-topbar: #0f1216;
+  --color-surface: #14171d;
+  --color-surface-2: #1a1e26;
+  --color-surface-hover: #20252e;
+  /* непрозрачный: им закрашивается закреплённая колонка выделенной строки */
+  --color-surface-selected: #272521;
+  --color-border: #252a33;
+  --color-border-strong: #363d49;
+  --color-border-hover: #4a5361;
+  --color-fg: #e7e9ed;
+  --color-fg-muted: #8d95a3;
+  --color-fg-faint: #5c6470;
+  --color-placeholder: #6e7683;
+
+  /* основное действие: светлая кнопка, отмеченный чекбокс */
+  --color-primary: #e7e9ed;
+  --color-primary-hover: #ffffff;
+  --color-primary-fg: #0d0f13;
+
+  /* акцент: ссылки, фокус, навигация, сортировка — и опасное действие */
+  --color-accent: #e8b04b;
+  --color-accent-hover: #f3c46a;
+  --color-accent-fg: #1b1405;
+  --color-danger: #c8403a;
+  --color-danger-hover: #d94c45;
+
+  /* команды (не CT/T) */
+  --color-team-a: #9a8cff;
+  --color-team-b: #3dd6b5;
+
+  /* шкала метрик и статусы */
+  --color-metric-good: #9bdb5c;
+  --color-metric-mid: #c9ced6;
+  --color-metric-bad: #f47a72;
+  --color-status-ok: #9bdb5c;
+  --color-status-progress: #6db3ff;
+  --color-status-error: #f47a72;
+  --color-status-neutral: #a2a9b5;
+
+  /* типографика */
+  --text-page: 28px;
+  --text-page--line-height: 34px;
+  --text-page--font-weight: 700;
+  --text-section: 18px;
+  --text-section--line-height: 24px;
+  --text-section--font-weight: 700;
+  --text-sub: 15px;
+  --text-sub--line-height: 20px;
+  --text-sub--font-weight: 700;
+  --text-table: 13px;
+  --text-table--line-height: 18px;
+  --text-small: 12px;
+  --text-small--line-height: 16px;
+  --text-over: 11px;
+  --text-over--line-height: 14px;
+  --text-over--letter-spacing: 0.08em;
+  --text-stat: 32px;
+  --text-stat--line-height: 36px;
+  --text-stat--font-weight: 800;
+  --text-score: 56px;
+  --text-score--line-height: 56px;
+  --text-score--font-weight: 800;
+
+  /* форма */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --shadow-overlay: 0 20px 48px rgb(0 0 0 / 0.55);
+
+  /* узкий экран макета — до 720 px */
+  --breakpoint-md: 45rem;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--color-bg);
+    color: var(--color-fg);
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 500;
+    -webkit-font-smoothing: antialiased;
+  }
+  table,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  a {
+    color: var(--color-accent);
+    border-radius: 4px;
+  }
+  a:hover {
+    color: var(--color-accent-hover);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  input::-webkit-calendar-picker-indicator {
+    filter: invert(0.65);
+    cursor: pointer;
+  }
+}
+
+/* Кольцо фокуса с клавиатуры: двойная тень, видна на любом фоне. */
+@utility focus-ring {
+  &:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--color-bg),
+      0 0 0 4px var(--color-accent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin {
+    animation-duration: 2.4s;
+  }
+}

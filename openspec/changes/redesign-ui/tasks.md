@@ -8,13 +8,13 @@
 
 ## 2. Фронтенд: основа
 
-- [ ] 2.1 Добавить зависимости `tailwindcss`, `@tailwindcss/vite`, `@headlessui/react`, `lucide-react`, `@fontsource-variable/manrope`, `@fontsource-variable/jetbrains-mono`, подключить плагин в `web/vite.config.ts`; проверить `npm run build` и `make build`
-- [ ] 2.2 Переписать `web/src/index.css`: `@import`, шрифты, `@theme` из макета, `@layer base`; убрать старые правила; проверить, что в собранном `internal/webui/dist` есть woff2 с кириллицей и нет ссылок на внешние домены (`grep -r googleapis internal/webui/dist` пусто)
+- [x] 2.1 Добавить зависимости `tailwindcss`, `@tailwindcss/vite`, `@headlessui/react`, `lucide-react`, `@fontsource-variable/manrope`, `@fontsource-variable/jetbrains-mono`, подключить плагин в `web/vite.config.ts`; проверить `npm run build` и `make build`
+- [x] 2.2 Переписать `web/src/index.css`: `@import`, шрифты, `@theme` из макета, `@layer base`; убрать старые правила; проверить, что в собранном `internal/webui/dist` есть woff2 с кириллицей и нет ссылок на внешние домены (`grep -r googleapis internal/webui/dist` пусто)
 - [ ] 2.3 `web/src/metrics.ts` (пороги и сравнение по округлённому значению) и `web/src/sort.ts` + хук `useSort` (формат `col`, `col.asc`/`col.desc`, умолчание не пишется в адрес, неизвестная колонка игнорируется, `replace: true`); проверить `tsc --noEmit` и E2E в 5.2
-- [ ] 2.4 Компоненты каркаса и форм в `web/src/components/ui/`: `Layout`, `PageHeader`, `Card`, `Button`, `Field`/`Input`, `Checkbox`, `Segment`, `Alert`, `EmptyState`, `StatTile`; проверить `tsc` и `npm run lint`
-- [ ] 2.5 Компоненты данных: `StatusBadge`, `OutcomeBadge`, `Score`, `ScoreBoard`, `MetricValue`, `StatTable` (`<table>`, `aria-sort`, закреплённая первая колонка, подсветка строк) и общее описание колонок игрока; проверить `tsc` и `npm run lint`
-- [ ] 2.6 `ConfirmDialog` и `FormDialog` на Headless UI (фокус на «Отмена» у опасного, блокировка закрытия во время запроса, ошибка внутри диалога); проверить `tsc` и `npm run lint`
-- [ ] 2.7 `api.uploadDemo` (один файл, `AbortSignal`) и хук `useUploadQueue` (последовательная отправка, прогресс, ETA, отмена файла и очереди, отсев форматов); компоненты `DropZone` и `UploadList`; проверить `tsc` и `npm run lint`
+- [x] 2.4 Компоненты каркаса и форм в `web/src/components/ui/`: `Layout`, `PageHeader`, `Card`, `Button`, `Field`/`Input`, `Checkbox`, `Segment`, `Alert`, `EmptyState`, `StatTile`; проверить `tsc` и `npm run lint`
+- [x] 2.5 Компоненты данных: `StatusBadge`, `OutcomeBadge`, `Score`, `ScoreBoard`, `MetricValue`, `StatTable` (`<table>`, `aria-sort`, закреплённая первая колонка, подсветка строк) и общее описание колонок игрока; проверить `tsc` и `npm run lint`
+- [x] 2.6 `ConfirmDialog` и `FormDialog` на Headless UI (фокус на «Отмена» у опасного, блокировка закрытия во время запроса, ошибка внутри диалога); проверить `tsc` и `npm run lint`
+- [x] 2.7 `api.uploadDemo` (один файл, `AbortSignal`) и хук `useUploadQueue` (последовательная отправка, прогресс, ETA, отмена файла и очереди, отсев форматов); компоненты `DropZone` и `UploadList`; проверить `tsc` и `npm run lint`
 
 ## 3. Фронтенд: страницы
 

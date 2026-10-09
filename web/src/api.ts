@@ -150,25 +150,43 @@ export const api = {
   listPlayers: (query: string) => request<PlayersResponse>('GET', `/api/players?${query}`),
   getPlayer: (steamId: string, query: string) => request<PlayerProfile>('GET', `/api/players/${steamId}?${query}`),
 
-  // XHR вместо fetch: у fetch нет прогресса отправки, а демки весят сотни мегабайт.
-  uploadDemos(sessionId: string, files: File[], onProgress: (loaded: number, total: number) => void) {
-    return new Promise<UploadResult[]>((resolve, reject) => {
+  // Отправляет один файл. XHR вместо fetch: у fetch нет прогресса отправки, а демки весят сотни мегабайт.
+  // При signal.abort() отправка обрывается, промис отклоняется с DOMException AbortError.
+  uploadDemo(
+    sessionId: string,
+    file: File,
+    onProgress: (loaded: number, total: number) => void,
+    signal?: AbortSignal,
+  ): Promise<UploadResult> {
+    return new Promise<UploadResult>((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new DOMException('загрузка отменена', 'AbortError'))
+        return
+      }
       const form = new FormData()
-      for (const f of files) form.append('files', f)
+      form.append('files', file)
       const xhr = new XMLHttpRequest()
       xhr.open('POST', `/api/sessions/${sessionId}/demos`)
       xhr.upload.onprogress = (e) => onProgress(e.loaded, e.total)
       xhr.onload = () => {
+        signal?.removeEventListener('abort', abort)
         let data: unknown = null
         try {
           data = JSON.parse(xhr.responseText)
         } catch {
           /* ответ не JSON */
         }
-        if (xhr.status >= 200 && xhr.status < 300) resolve(data as UploadResult[])
+        const list = data as UploadResult[] | null
+        if (xhr.status >= 200 && xhr.status < 300 && Array.isArray(list) && list.length > 0) resolve(list[0])
         else reject(new Error((data as { error?: string } | null)?.error ?? `HTTP ${xhr.status}`))
       }
-      xhr.onerror = () => reject(new Error('сетевая ошибка'))
+      xhr.onerror = () => {
+        signal?.removeEventListener('abort', abort)
+        reject(new Error('соединение оборвалось, файл не сохранён'))
+      }
+      xhr.onabort = () => reject(new DOMException('загрузка отменена', 'AbortError'))
+      const abort = () => xhr.abort()
+      signal?.addEventListener('abort', abort, { once: true })
       xhr.send(form)
     })
   },

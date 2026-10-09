@@ -246,7 +246,8 @@ function UploadForm({ sessionId, onUploaded }: { sessionId: string; onUploaded: 
     setResults([])
     setProgress(0)
     try {
-      const res = await api.uploadDemos(sessionId, files, (loaded, total) => setProgress(total ? loaded / total : 0))
+      const res: UploadResult[] = []
+      for (const f of files) res.push(await api.uploadDemo(sessionId, f, (loaded, total) => setProgress(total ? loaded / total : 0)))
       setResults(res)
       setFiles([])
       form.reset()
