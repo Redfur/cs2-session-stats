@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 import { api, isProcessing, matchStatusLabel, type MatchDetails } from '../api'
 import { PlayersTable } from '../components/PlayersTable'
 
@@ -9,6 +9,8 @@ export function MatchPage() {
   const { id = '' } = useParams()
   const [data, setData] = useState<MatchDetails | null>(null)
   const [error, setError] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const navigate = useNavigate()
 
   const load = useCallback(() => {
     api.getMatch(id).then(
@@ -39,6 +41,18 @@ export function MatchPage() {
     }
   }
 
+  async function remove(m: MatchDetails['match']) {
+    if (!confirm(`Удалить матч #${m.ordinal} вместе с демкой? Это необратимо.`)) return
+    setDeleting(true)
+    try {
+      await api.deleteMatch(m.id)
+      navigate(`/sessions/${m.sessionId}`)
+    } catch (err) {
+      setError((err as Error).message)
+      setDeleting(false)
+    }
+  }
+
   if (error && !data) return <p className="error">{error}</p>
   if (!data) return <p className="muted">Загрузка…</p>
 
@@ -56,6 +70,9 @@ export function MatchPage() {
         Статус: {matchStatusLabel(match)}{' '}
         <button onClick={reparse} disabled={processing}>
           Пересчитать
+        </button>{' '}
+        <button onClick={() => remove(match)} disabled={deleting}>
+          Удалить матч
         </button>
       </p>
       {error && <p className="error">{error}</p>}

@@ -129,6 +129,14 @@ export const api = {
   createSession: (date: string, title: string) =>
     request<Session>('POST', '/api/sessions', { date, title }),
   getSession: (id: string) => request<SessionDetails>('GET', `/api/sessions/${id}`),
+  updateSession: (id: string, date: string, title: string) =>
+    request<Session>('PATCH', `/api/sessions/${id}`, { date, title }),
+  // удаляет сессию с матчами и файлами демок; ответ 204 без тела
+  deleteSession: (id: string) => request<void>('DELETE', `/api/sessions/${id}`),
+  // matchIds — все матчи сессии в новом порядке
+  reorderMatches: (sessionId: string, matchIds: number[]) =>
+    request<Match[]>('PUT', `/api/sessions/${sessionId}/order`, { matchIds }),
+  deleteMatch: (id: string | number) => request<void>('DELETE', `/api/matches/${id}`),
   getMatch: (id: string) => request<MatchDetails>('GET', `/api/matches/${id}`),
   reparseMatch: (id: string | number) => request<Match>('POST', `/api/matches/${id}/reparse`),
   reparseSession: (id: string) => request<{ queued: number }>('POST', `/api/sessions/${id}/reparse`),
