@@ -29,10 +29,10 @@ func TestMigrationsIdempotent(t *testing.T) {
 		if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 			t.Fatal(err)
 		}
-		if version != 2 {
-			t.Fatalf("user_version = %d, ожидалось 2", version)
+		if version != 3 {
+			t.Fatalf("user_version = %d, ожидалось 3", version)
 		}
-		for _, table := range []string{"sessions", "matches", "match_players"} {
+		for _, table := range []string{"sessions", "matches", "match_players", "match_duels"} {
 			var n int
 			if err := s.db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&n); err != nil || n != 1 {
 				t.Fatalf("таблица %s не создана (err=%v)", table, err)
@@ -76,5 +76,40 @@ func TestMigration002Backfill(t *testing.T) {
 			}
 		}
 		s.Close()
+	}
+}
+
+// БД версии 2 схемы мигрирует: результат старых матчей помечается версией 1, дуэлей у них нет.
+func TestMigration003Backfill(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	raw, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"001_init.sql", "002_reprocessing.sql"} {
+		body, _ := migrationsFS.ReadFile("migrations/" + name)
+		if _, err := raw.Exec(string(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw.Exec("PRAGMA user_version = 2")
+	raw.Exec("INSERT INTO sessions (id, date, created_at) VALUES (1, '2026-10-08', 'x')")
+	raw.Exec("INSERT INTO matches (session_id, ordinal, sha256, original_name, status, created_at, has_result, processed_version) VALUES (1, 1, 'done', 'f', 'done', 'x', 1, 1)")
+	raw.Exec("INSERT INTO matches (session_id, ordinal, sha256, original_name, status, created_at, has_result, processed_version) VALUES (1, 2, 'failed', 'f', 'failed', 'x', 0, 1)")
+	raw.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for sha, want := range map[string]int{"done": 1, "failed": 0} {
+		var v int
+		if err := s.db.QueryRow("SELECT result_version FROM matches WHERE sha256 = ?", sha).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		if v != want {
+			t.Errorf("%s: result_version=%d, ожидалось %d", sha, v, want)
+		}
 	}
 }

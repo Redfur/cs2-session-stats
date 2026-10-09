@@ -21,7 +21,9 @@ import (
 // сервис сам поставит в очередь на пересчёт матчи, обработанные более старой версией.
 // Изменения формул производных показателей (rating, ADR, проценты) версию не требуют —
 // они считаются из счётчиков при чтении.
-const ProcessingVersion = 1
+//
+// Версия 2: вместе с результатом сохраняются личные дуэли (store.DuelsSinceVersion).
+const ProcessingVersion = 2
 
 // DemoOpener открывает сохранённую демку по sha256.
 type DemoOpener interface {
@@ -132,5 +134,6 @@ func (w *Worker) process(ctx context.Context, m store.Match) (err error) {
 		ScoreA:  match.ScoreA,
 		ScoreB:  match.ScoreB,
 		Players: stats.Compute(match),
+		Duels:   stats.Duels(match),
 	}, ProcessingVersion)
 }

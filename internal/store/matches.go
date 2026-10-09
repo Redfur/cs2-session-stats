@@ -46,6 +46,7 @@ type MatchResult struct {
 	ScoreA  int
 	ScoreB  int
 	Players []stats.PlayerStats
+	Duels   []stats.Duel // все пары соперников матча, включая нули
 }
 
 // DuplicateError — демка с таким sha256 уже есть в системе.
@@ -158,6 +159,7 @@ func (s *Store) ResetParsing(ctx context.Context) (int64, error) {
 }
 
 // SaveMatchResult атомарно заменяет результат матча, полученный версией обработки version, и переводит матч в done.
+// Если матч удалён во время обработки, возвращает ErrNotFound и ничего не сохраняет.
 func (s *Store) SaveMatchResult(ctx context.Context, matchID int64, r MatchResult, version int) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -165,8 +167,21 @@ func (s *Store) SaveMatchResult(ctx context.Context, matchID int64, r MatchResul
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, "DELETE FROM match_players WHERE match_id = ?", matchID); err != nil {
+	res, err := tx.ExecContext(ctx, `
+		UPDATE matches SET status = ?, error = '', map = ?, rounds = ?, score_a = ?, score_b = ?, parsed_at = ?,
+			has_result = 1, processed_version = ?, result_version = ?
+		WHERE id = ?`, StatusDone, r.Map, r.Rounds, r.ScoreA, r.ScoreB, s.timestamp(), version, version, matchID)
+	if err != nil {
 		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+
+	for _, table := range []string{"match_players", "match_duels"} {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE match_id = ?", matchID); err != nil {
+			return err
+		}
 	}
 	for _, p := range r.Players {
 		_, err := tx.ExecContext(ctx, `
@@ -179,15 +194,13 @@ func (s *Store) SaveMatchResult(ctx context.Context, matchID int64, r MatchResul
 			return fmt.Errorf("игрок %d: %w", p.SteamID, err)
 		}
 	}
-	res, err := tx.ExecContext(ctx, `
-		UPDATE matches SET status = ?, error = '', map = ?, rounds = ?, score_a = ?, score_b = ?, parsed_at = ?,
-			has_result = 1, processed_version = ?
-		WHERE id = ?`, StatusDone, r.Map, r.Rounds, r.ScoreA, r.ScoreB, s.timestamp(), version, matchID)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
+	for _, d := range r.Duels {
+		_, err := tx.ExecContext(ctx,
+			"INSERT INTO match_duels (match_id, killer_id, victim_id, kills) VALUES (?, ?, ?, ?)",
+			matchID, int64(d.Killer), int64(d.Victim), d.Kills)
+		if err != nil {
+			return fmt.Errorf("дуэль %d→%d: %w", d.Killer, d.Victim, err)
+		}
 	}
 	return tx.Commit()
 }

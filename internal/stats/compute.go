@@ -13,10 +13,9 @@ const TradeWindow = 5 * time.Second
 
 // Compute считает статистику каждого игрока матча.
 func Compute(m parser.Match) []PlayerStats {
-	team := make(map[uint64]parser.Team, len(m.Players))
+	team := teams(m)
 	acc := make(map[uint64]*PlayerStats, len(m.Players))
 	for _, p := range m.Players {
-		team[p.SteamID] = p.Team
 		acc[p.SteamID] = &PlayerStats{
 			SteamID:  p.SteamID,
 			Name:     p.Name,
@@ -25,11 +24,7 @@ func Compute(m parser.Match) []PlayerStats {
 			Counters: Counters{Rounds: len(m.Rounds)},
 		}
 	}
-	isEnemyKill := func(k parser.Kill) bool {
-		kt, ok1 := team[k.Killer]
-		vt, ok2 := team[k.Victim]
-		return ok1 && ok2 && k.Killer != k.Victim && kt != vt
-	}
+	isEnemyKill := func(k parser.Kill) bool { return enemyKill(team, k) }
 
 	for _, r := range m.Rounds {
 		kills := append([]parser.Kill(nil), r.Kills...)
@@ -113,6 +108,23 @@ func Compute(m parser.Match) []PlayerStats {
 		}
 	}
 	return out
+}
+
+// teams — команда каждого игрока матча.
+func teams(m parser.Match) map[uint64]parser.Team {
+	team := make(map[uint64]parser.Team, len(m.Players))
+	for _, p := range m.Players {
+		team[p.SteamID] = p.Team
+	}
+	return team
+}
+
+// enemyKill — убийство противника: оба игрока в матче, в разных командах, не суицид.
+// Единое правило для K и личных дуэлей.
+func enemyKill(team map[uint64]parser.Team, k parser.Kill) bool {
+	kt, ok1 := team[k.Killer]
+	vt, ok2 := team[k.Victim]
+	return ok1 && ok2 && k.Killer != k.Victim && kt != vt
 }
 
 func result(t parser.Team, scoreA, scoreB int) Result {

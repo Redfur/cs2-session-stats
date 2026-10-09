@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"cs2stats/internal/ingest"
+	"cs2stats/internal/stats"
 	"cs2stats/internal/store"
 )
 
@@ -44,6 +45,9 @@ func (s *Server) Handler(static http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/sessions/{id}/reparse", s.reparseSession)
 	mux.HandleFunc("GET /api/players", s.listPlayers)
 	mux.HandleFunc("GET /api/players/{steamId}", s.getPlayer)
+	mux.HandleFunc("GET /api/matches/{id}/duels", s.getMatchDuels)
+	mux.HandleFunc("GET /api/sessions/{id}/duels", s.getSessionDuels)
+	mux.HandleFunc("GET /api/players/{steamId}/duels", s.getPlayerDuels)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "неизвестный метод API")
 	})
@@ -325,6 +329,11 @@ func (s *Server) getMatch(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, err)
 		return
 	}
+	writeJSON(w, http.StatusOK, matchResponse{Match: m, Players: sortScoreboard(ps)})
+}
+
+// sortScoreboard — игроки матча в порядке scoreboard: команда A, затем B, внутри — по rating.
+func sortScoreboard(ps []stats.PlayerStats) []PlayerView {
 	players := make([]PlayerView, 0, len(ps))
 	for _, p := range ps {
 		players = append(players, MatchPlayerView(p))
@@ -335,7 +344,7 @@ func (s *Server) getMatch(w http.ResponseWriter, r *http.Request) {
 		}
 		return players[i].Rating > players[j].Rating
 	})
-	writeJSON(w, http.StatusOK, matchResponse{Match: m, Players: players})
+	return players
 }
 
 func (s *Server) reparseMatch(w http.ResponseWriter, r *http.Request) {

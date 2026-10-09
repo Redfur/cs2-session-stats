@@ -191,6 +191,11 @@ func TestRequeueOutdatedOnStart(t *testing.T) {
 	if c, _ := st.GetMatch(ctx, cur.ID); c.Map != "stale" {
 		t.Fatalf("актуальный матч пересчитан: %+v", c)
 	}
+	// после пересчёта у матча появились дуэли
+	covered, cells, err := st.MatchDuels(ctx, old.ID)
+	if err != nil || !covered || len(cells) != 2 {
+		t.Fatalf("дуэли пересчитанного матча: covered=%v cells=%+v err=%v", covered, cells, err)
+	}
 }
 
 // Пересчёт без исходной демки: ошибка, прежний результат сохранён.
@@ -263,5 +268,12 @@ func TestMatchDeletedDuringProcessing(t *testing.T) {
 	list, _ := st.ListSessionMatches(ctx, sess.ID)
 	if len(list) != 1 || list[0].ID != next.ID || list[0].Ordinal != 1 {
 		t.Fatalf("матчи сессии: %+v", list)
+	}
+}
+
+// Текущая версия обработки сохраняет дуэли: иначе новые матчи считались бы непокрытыми.
+func TestProcessingVersionHasDuels(t *testing.T) {
+	if ProcessingVersion < store.DuelsSinceVersion {
+		t.Fatalf("ProcessingVersion %d ниже store.DuelsSinceVersion %d", ProcessingVersion, store.DuelsSinceVersion)
 	}
 }
