@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"cs2stats/internal/stats"
@@ -100,7 +101,7 @@ func TestDuelsAPI(t *testing.T) {
 		t.Errorf("пустая сессия: %+v", sd)
 	}
 
-	// профиль: равный максимум убийств B и C нет — 2 против 12; погибает чаще от C (15), один соперник в обоих
+	// профиль: B 2:8 (20%), C 12:15 (44%) — выигранных пар нет, проигрывает хуже всего B
 	path := fmt.Sprintf("/api/players/%d/duels", duelA)
 	var pd playerDuelsResponse
 	if code := e.do(t, "GET", path+fmt.Sprintf("?session=%d", s1.ID), "", nil, &pd); code != 200 {
@@ -109,28 +110,18 @@ func TestDuelsAPI(t *testing.T) {
 	if pd.Status != "partial" || pd.EligibleMatches != 3 || pd.CoveredMatches != 2 || pd.CoveredSessions != 1 {
 		t.Errorf("покрытие профиля: %+v", pd)
 	}
-	if len(pd.MostKilled) != 1 || pd.MostKilled[0].Name != "charlie" || pd.MostKilled[0].Kills != 12 || pd.MostKilled[0].Deaths != 15 ||
-		len(pd.MostKilledBy) != 1 || pd.MostKilledBy[0].Name != "charlie" {
-		t.Errorf("максимумы: %+v / %+v", pd.MostKilled, pd.MostKilledBy)
+	if len(pd.Beats) != 0 || len(pd.LosesTo) != 1 || pd.LosesTo[0].Name != "bravo" || pd.LosesTo[0].Kills != 2 || pd.LosesTo[0].Deaths != 8 {
+		t.Errorf("по доле: %+v / %+v", pd.Beats, pd.LosesTo)
 	}
 
-	// равенство: в сессии 2026-10-01 только по первому матчу B и C — 1 и 12; добавим матч, где у B тоже 12
-	s3, _ := e.store.CreateSession(ctx, "2026-10-10", "")
-	d.match(s3, store.DuelsSinceVersion, duelA, []uint64{duelB, duelC}, []int{12, 12}, []int{15, 3})
-	e.do(t, "GET", path+fmt.Sprintf("?session=%d", s3.ID), "", nil, &pd)
-	if len(pd.MostKilled) != 2 || pd.MostKilled[0].Name != "bravo" || pd.MostKilled[1].Name != "charlie" ||
-		len(pd.MostKilledBy) != 1 || pd.MostKilledBy[0].Name != "bravo" || pd.Status != "complete" {
-		t.Errorf("равенство: %+v / %+v", pd.MostKilled, pd.MostKilledBy)
-	}
-
-	// все пары 0:0 — максимумы пусты, статус complete
+	// все пары 0:0 — показатели пусты, статус complete
 	e.do(t, "GET", path+fmt.Sprintf("?session=%d", s2.ID), "", nil, &pd)
-	if pd.Status != "complete" || len(pd.MostKilled) != 0 || len(pd.MostKilledBy) != 0 || len(pd.Opponents) != 1 || pd.Opponents[0].Share != nil {
+	if pd.Status != "complete" || len(pd.Beats) != 0 || len(pd.LosesTo) != 0 || len(pd.Opponents) != 1 || pd.Opponents[0].Share != nil {
 		t.Errorf("0:0: %+v", pd)
 	}
 	// пустой период и только непокрытые матчи
 	e.do(t, "GET", path+"?from=2027-01-01", "", nil, &pd)
-	if pd.Status != "no_matches" || pd.MostKilled == nil || pd.Opponents == nil {
+	if pd.Status != "no_matches" || pd.Beats == nil || pd.LosesTo == nil || pd.Opponents == nil {
 		t.Errorf("пустой период: %+v", pd)
 	}
 
@@ -151,5 +142,58 @@ func TestDuelsStatusUnavailable(t *testing.T) {
 	e.do(t, "GET", fmt.Sprintf("/api/players/%d/duels", duelA), "", nil, &pd)
 	if pd.Status != "unavailable" || len(pd.Opponents) != 0 {
 		t.Errorf("только старые матчи: %+v", pd)
+	}
+}
+
+// Выбор соперников профиля по доле дуэлей (спека personal-duels, «Выигранные и проигранные дуэли в профиле»).
+func TestPlayerDuelsByShare(t *testing.T) {
+	const (
+		duelD uint64 = 76561198000000014
+		duelE uint64 = 76561198000000015
+	)
+	e := newTestEnv(t)
+	ctx := context.Background()
+	d := &duelSeed{t: t, e: e, names: map[uint64]string{duelA: "alpha", duelB: "bravo", duelC: "charlie", duelD: "delta", duelE: "echo"}}
+	path := fmt.Sprintf("/api/players/%d/duels", duelA)
+	get := func(opp []uint64, kills, deaths []int) playerDuelsResponse {
+		t.Helper()
+		sess, _ := e.store.CreateSession(ctx, "2026-10-01", "")
+		d.match(sess, store.DuelsSinceVersion, duelA, opp, kills, deaths)
+		var pd playerDuelsResponse
+		if code := e.do(t, "GET", path+fmt.Sprintf("?session=%d", sess.ID), "", nil, &pd); code != 200 {
+			t.Fatalf("дуэли профиля: %d", code)
+		}
+		return pd
+	}
+	names := func(list []opponentView) string {
+		var out []string
+		for _, o := range list {
+			out = append(out, o.Name)
+		}
+		return strings.Join(out, ",")
+	}
+
+	// доля важнее объёма: B 30:25 (55%), C 12:7 (63%), D 8:15 (35%)
+	pd := get([]uint64{duelB, duelC, duelD}, []int{30, 12, 8}, []int{25, 7, 15})
+	if names(pd.Beats) != "charlie" || names(pd.LosesTo) != "delta" {
+		t.Errorf("доля важнее объёма: %s / %s", names(pd.Beats), names(pd.LosesTo))
+	}
+
+	// равные доли 2:1 и 4:2 — оба, сначала пара с большим числом убийств; D 1:1 — 50%, никуда
+	pd = get([]uint64{duelB, duelC, duelD}, []int{2, 4, 1}, []int{1, 2, 1})
+	if names(pd.Beats) != "charlie,bravo" || len(pd.LosesTo) != 0 {
+		t.Errorf("равные доли: %s / %s", names(pd.Beats), names(pd.LosesTo))
+	}
+
+	// маленькая выборка: 1:0 даёт 100% и обходит 20:5; 5:5 не попадает никуда
+	pd = get([]uint64{duelB, duelC, duelD}, []int{1, 20, 5}, []int{0, 5, 5})
+	if names(pd.Beats) != "bravo" || len(pd.LosesTo) != 0 {
+		t.Errorf("маленькая выборка: %s / %s", names(pd.Beats), names(pd.LosesTo))
+	}
+
+	// равные проигрыши: 1:3 и 2:6 — оба, сначала пара с большим числом убийств; 0:0 не участвует
+	pd = get([]uint64{duelB, duelC, duelE}, []int{1, 2, 0}, []int{3, 6, 0})
+	if names(pd.LosesTo) != "charlie,bravo" || len(pd.Beats) != 0 {
+		t.Errorf("равные проигрыши: %s / %s", names(pd.Beats), names(pd.LosesTo))
 	}
 }

@@ -160,30 +160,47 @@ type opponentView struct {
 }
 
 type playerDuelsResponse struct {
-	Status          string         `json:"status"`
-	EligibleMatches int            `json:"eligibleMatches"`
-	CoveredMatches  int            `json:"coveredMatches"`
-	CoveredSessions int            `json:"coveredSessions"`
-	MostKilled      []opponentView `json:"mostKilled"`
-	MostKilledBy    []opponentView `json:"mostKilledBy"`
-	Opponents       []opponentView `json:"opponents"`
+	Status          string `json:"status"`
+	EligibleMatches int    `json:"eligibleMatches"`
+	CoveredMatches  int    `json:"coveredMatches"`
+	CoveredSessions int    `json:"coveredSessions"`
+	// Beats — соперники с наибольшей долей игрока в паре, если она больше 50%;
+	// LosesTo — с наименьшей, если она меньше 50%.
+	Beats     []opponentView `json:"beats"`
+	LosesTo   []opponentView `json:"losesTo"`
+	Opponents []opponentView `json:"opponents"`
 }
 
-// maxBy возвращает всех соперников с наибольшим положительным значением.
-func maxBy(list []opponentView, value func(opponentView) int) []opponentView {
-	best := 0
-	for _, o := range list {
-		best = max(best, value(o))
-	}
+// cmpShare сравнивает доли пар a и b, K/(K+D), без округления: < 0, если доля a меньше.
+// Обе пары должны иметь K+D > 0.
+func cmpShare(a, b opponentView) int {
+	return a.Kills*(b.Kills+b.Deaths) - b.Kills*(a.Kills+a.Deaths)
+}
+
+// byShare возвращает соперников с крайней долей среди пар, прошедших фильтр keep:
+// best=true — с наибольшей, иначе — с наименьшей. Равные доли — все, сначала пары
+// с большим числом убийств; list уже упорядочен по нику и SteamID.
+func byShare(list []opponentView, keep func(opponentView) bool, best bool) []opponentView {
 	out := []opponentView{}
-	if best == 0 {
-		return out
-	}
 	for _, o := range list {
-		if value(o) == best {
+		if !keep(o) {
+			continue
+		}
+		c := 0
+		if len(out) > 0 {
+			c = cmpShare(o, out[0])
+			if !best {
+				c = -c
+			}
+		}
+		switch {
+		case len(out) == 0 || c > 0:
+			out = []opponentView{o}
+		case c == 0:
 			out = append(out, o)
 		}
 	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Kills+out[i].Deaths > out[j].Kills+out[j].Deaths })
 	return out
 }
 
@@ -218,7 +235,7 @@ func (s *Server) getPlayerDuels(w http.ResponseWriter, r *http.Request) {
 		opps = append(opps, opponentView{SteamID: strconv.FormatUint(o.SteamID, 10), Name: o.Name,
 			Kills: o.Kills, Deaths: o.Deaths, Share: share(o.Kills, o.Deaths), Maps: o.Maps})
 	}
-	// детерминированный порядок, в том числе при равных максимумах: по нику, затем по SteamID
+	// детерминированный порядок, в том числе при равных долях: по нику, затем по SteamID
 	sort.SliceStable(opps, func(i, j int) bool {
 		a, b := strings.ToLower(opps[i].Name), strings.ToLower(opps[j].Name)
 		if a != b {
@@ -229,8 +246,8 @@ func (s *Server) getPlayerDuels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, playerDuelsResponse{
 		Status:          duelsStatus(d.Eligible, d.Covered),
 		EligibleMatches: d.Eligible, CoveredMatches: d.Covered, CoveredSessions: d.CoveredSessions,
-		MostKilled:   maxBy(opps, func(o opponentView) int { return o.Kills }),
-		MostKilledBy: maxBy(opps, func(o opponentView) int { return o.Deaths }),
-		Opponents:    opps,
+		Beats:     byShare(opps, func(o opponentView) bool { return o.Kills > o.Deaths }, true),
+		LosesTo:   byShare(opps, func(o opponentView) bool { return o.Kills < o.Deaths }, false),
+		Opponents: opps,
 	})
 }

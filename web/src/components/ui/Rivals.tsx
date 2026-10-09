@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import type { Opponent } from '../../api'
+import { duelPct } from '../../duels'
 import { plural } from '../../format'
 import { cx } from './cx'
 
@@ -8,14 +9,16 @@ interface RivalGroup {
   list: Opponent[]
   // какое число в счёте значимо для показателя: убийства или смерти
   by: 'kills' | 'deaths'
+  // текст, если подходящих соперников нет
+  empty: string
 }
 
 const TIES: Record<number, string> = { 2: 'двое поровну', 3: 'трое поровну' }
 
 const cardsText = (n: number) => `на ${plural(n, ['карте', 'картах', 'картах'])}`
 
-// Rivals — два показателя профиля: соперники с наибольшим числом убийств и смертей.
-// Счёт «убил : погиб» — со стороны владельца профиля.
+// Rivals — два показателя профиля: соперники с наибольшей и наименьшей долей дуэлей.
+// Счёт «убил : погиб» и доля — со стороны владельца профиля.
 export function Rivals({ groups }: { groups: RivalGroup[] }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2">
@@ -31,6 +34,7 @@ export function Rivals({ groups }: { groups: RivalGroup[] }) {
             <h3 className="m-0 text-over font-bold uppercase text-fg-muted">{g.title}</h3>
             {g.list.length > 1 && <span className="text-small text-fg-muted">{TIES[g.list.length] ?? `${g.list.length} поровну`}</span>}
           </div>
+          {g.list.length === 0 && <p className="m-0 py-[7px] text-[13px] leading-[19px] text-fg-muted">{g.empty}</p>}
           <ul className="m-0 flex list-none flex-col p-0">
             {g.list.map((o) => (
               <li
@@ -42,11 +46,12 @@ export function Rivals({ groups }: { groups: RivalGroup[] }) {
                 </Link>
                 <span
                   className="inline-flex items-baseline gap-1.5 text-[15px] leading-5 tabular-nums"
-                  aria-label={`убил ${o.kills}, погиб ${o.deaths}, ${cardsText(o.maps)}`}
+                  aria-label={`убил ${o.kills}, погиб ${o.deaths}, доля ${duelPct(o.kills, o.deaths)}%, ${cardsText(o.maps)}`}
                 >
                   <span className={g.by === 'kills' ? 'font-extrabold text-fg' : 'font-medium text-fg-muted'}>{o.kills}</span>
                   <span className="font-medium text-fg-faint">:</span>
                   <span className={g.by === 'deaths' ? 'font-extrabold text-fg' : 'font-medium text-fg-muted'}>{o.deaths}</span>
+                  <span className="ml-1 text-small font-semibold text-fg-muted">{duelPct(o.kills, o.deaths)}%</span>
                 </span>
                 <span className="col-span-full text-small whitespace-nowrap text-fg-muted md:col-span-1 md:text-right" aria-hidden>
                   {cardsText(o.maps)}

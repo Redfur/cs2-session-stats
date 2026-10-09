@@ -161,8 +161,10 @@ export interface PlayerDuels {
   eligibleMatches: number
   coveredMatches: number
   coveredSessions: number
-  mostKilled: Opponent[]
-  mostKilledBy: Opponent[]
+  // соперники с наибольшей долей игрока в паре, если она больше 50%
+  beats: Opponent[]
+  // соперники с наименьшей долей, если она меньше 50%
+  losesTo: Opponent[]
   opponents: Opponent[]
 }
 

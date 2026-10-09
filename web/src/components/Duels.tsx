@@ -269,7 +269,7 @@ export function SessionDuelsCard({
   )
 }
 
-// RivalsCard — «Соперники» в профиле: чаще всего убивает и чаще всего погибает от.
+// RivalsCard — «Соперники» в профиле: у кого игрок выигрывает дуэли и кому проигрывает (по доле в паре).
 export function RivalsCard({ steamId, name, query }: { steamId: string; name: string; query: string }) {
   const { data, error, reload } = useDuels<PlayerDuels>(() => api.getPlayerDuels(steamId, query), `${steamId}|${query}`)
   const partial = data?.status === 'partial'
@@ -279,14 +279,14 @@ export function RivalsCard({ steamId, name, query }: { steamId: string; name: st
   else if (data.status === 'no_matches') body = <Empty>Нет игр за выбранный период. Измените даты или выберите другие сессии.</Empty>
   else if (data.status === 'unavailable')
     body = <Empty>Дуэли ещё не посчитаны: матчи за этот период обработаны старой версией. Пересчитайте их на страницах сессий.</Empty>
-  else if (data.mostKilled.length === 0 && data.mostKilledBy.length === 0)
+  else if (data.opponents.every((o) => o.share === null))
     body = <Empty>Личных убийств нет: за выбранный период {name} ни разу не убил соперника и не погиб от него.</Empty>
   else
     body = (
       <Rivals
         groups={[
-          { title: 'Чаще всего убивает', list: data.mostKilled, by: 'kills' },
-          { title: 'Чаще всего погибает от', list: data.mostKilledBy, by: 'deaths' },
+          { title: 'Выигрывает дуэли у', list: data.beats, by: 'kills', empty: 'Нет пар с долей выше 50%' },
+          { title: 'Проигрывает дуэли', list: data.losesTo, by: 'deaths', empty: 'Нет пар с долей ниже 50%' },
         ]}
       />
     )
