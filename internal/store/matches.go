@@ -231,3 +231,103 @@ func (s *Store) MatchPlayers(ctx context.Context, matchID int64) ([]stats.Player
 	}
 	return list, rows.Err()
 }
+
+// DeleteMatch удаляет матч вместе со статистикой и перенумеровывает оставшиеся матчи сессии.
+// Возвращает удалённый матч: файл его демки удаляет вызывающий код после коммита.
+func (s *Store) DeleteMatch(ctx context.Context, id int64) (Match, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Match{}, err
+	}
+	defer tx.Rollback()
+
+	m, err := scanMatch(tx.QueryRowContext(ctx, "DELETE FROM matches WHERE id = ? RETURNING "+matchColumns, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Match{}, ErrNotFound
+	}
+	if err != nil {
+		return Match{}, err
+	}
+	ids, err := sessionMatchIDs(ctx, tx, m.SessionID)
+	if err != nil {
+		return Match{}, err
+	}
+	if err := renumber(ctx, tx, m.SessionID, ids); err != nil {
+		return Match{}, err
+	}
+	return m, tx.Commit()
+}
+
+// ReorderMatches задаёт новый порядок матчей сессии. ids — все матчи сессии в новом порядке,
+// иначе ErrOrderMismatch. Неизвестная сессия — ErrNotFound.
+func (s *Store) ReorderMatches(ctx context.Context, sessionID int64, ids []int64) ([]Match, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var exists int
+	err = tx.QueryRowContext(ctx, "SELECT 1 FROM sessions WHERE id = ?", sessionID).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	current, err := sessionMatchIDs(ctx, tx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) != len(current) {
+		return nil, ErrOrderMismatch
+	}
+	known := make(map[int64]bool, len(current))
+	for _, id := range current {
+		known[id] = true
+	}
+	for _, id := range ids {
+		if !known[id] {
+			return nil, ErrOrderMismatch // чужой матч или повтор
+		}
+		delete(known, id)
+	}
+	if err := renumber(ctx, tx, sessionID, ids); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return s.ListSessionMatches(ctx, sessionID)
+}
+
+func sessionMatchIDs(ctx context.Context, tx *sql.Tx, sessionID int64) ([]int64, error) {
+	rows, err := tx.QueryContext(ctx, "SELECT id FROM matches WHERE session_id = ? ORDER BY ordinal", sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// renumber нумерует матчи сессии 1..N в порядке ids. Сначала номера уходят в отрицательные,
+// иначе промежуточное состояние нарушает UNIQUE (session_id, ordinal).
+func renumber(ctx context.Context, tx *sql.Tx, sessionID int64, ids []int64) error {
+	if _, err := tx.ExecContext(ctx, "UPDATE matches SET ordinal = -ordinal WHERE session_id = ?", sessionID); err != nil {
+		return err
+	}
+	for i, id := range ids {
+		if _, err := tx.ExecContext(ctx, "UPDATE matches SET ordinal = ? WHERE id = ?", i+1, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}

@@ -184,3 +184,43 @@ func TestDuplicate(t *testing.T) {
 	}
 	rc.Close()
 }
+
+func TestRemoveDemos(t *testing.T) {
+	e := newEnv(t, 1<<20)
+	ctx := context.Background()
+	shaOf := func(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
+	otherDemo := append([]byte("HL2DEMO\x00"), "другая демка"...)
+
+	deleted := e.ingest("a.dem", sampleDemo)
+	kept := e.ingest("b.dem", otherDemo)
+	if deleted.Status != Accepted || kept.Status != Accepted {
+		t.Fatalf("загрузка: %+v %+v", deleted, kept)
+	}
+	if _, err := e.store.DeleteMatch(ctx, deleted.MatchID); err != nil {
+		t.Fatal(err)
+	}
+
+	// у второго sha матч есть — файл остаётся; отсутствующий файл ошибкой не считается
+	if err := e.svc.RemoveDemos(ctx, []string{shaOf(sampleDemo), shaOf(otherDemo), shaOf([]byte("нет такой"))}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.demos.Open(shaOf(sampleDemo)); !os.IsNotExist(err) {
+		t.Fatalf("файл удалённого матча не удалён: %v", err)
+	}
+	rc, err := e.demos.Open(shaOf(otherDemo))
+	if err != nil {
+		t.Fatalf("файл живого матча удалён: %v", err)
+	}
+	rc.Close()
+
+	// после удаления та же демка принимается как новая
+	again := e.ingest("a.dem", sampleDemo)
+	if again.Status != Accepted || again.MatchID == deleted.MatchID {
+		t.Fatalf("повторная загрузка: %+v", again)
+	}
+	rc, err = e.demos.Open(shaOf(sampleDemo))
+	if err != nil {
+		t.Fatalf("файл повторной загрузки не сохранён: %v", err)
+	}
+	rc.Close()
+}

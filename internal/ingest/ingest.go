@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/klauspost/compress/zstd"
 
@@ -76,6 +77,10 @@ type Service struct {
 	Demos   Storage
 	TmpDir  string // должен быть на той же ФС, что и хранилище демок
 	MaxSize int64  // лимит распакованного размера демки
+
+	// mu согласует запись файла демки и создание матча с удалением файлов (RemoveDemos):
+	// иначе удаление может стереть файл, который параллельная загрузка той же демки только что сохранила.
+	mu sync.Mutex
 }
 
 // Ingest принимает один файл в сессию. Ошибки по файлу возвращаются в FileResult,
@@ -92,6 +97,10 @@ func (s *Service) Ingest(ctx context.Context, sessionID int64, name string, r io
 		return fail(err)
 	}
 	defer os.Remove(tmpPath) // после Save файла по этому пути уже нет
+
+	// распаковка — долгая часть — идёт вне блокировки; под ней только проверка, rename и insert
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	duplicate := func(m store.Match) FileResult {
 		res.Status, res.MatchID, res.SessionID = Duplicate, m.ID, m.SessionID
@@ -118,6 +127,28 @@ func (s *Service) Ingest(ctx context.Context, sessionID int64, name string, r io
 	}
 	res.Status, res.MatchID, res.SessionID = Accepted, m.ID, m.SessionID
 	return res
+}
+
+// RemoveDemos удаляет файлы демок удалённых матчей. Файл sha, для которого уже снова
+// существует матч (демку загрузили заново), не трогается. Ошибки по файлам объединяются.
+func (s *Service) RemoveDemos(ctx context.Context, shas []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var errs []error
+	for _, sha := range shas {
+		_, err := s.Store.FindMatchBySHA(ctx, sha)
+		switch {
+		case err == nil:
+			continue
+		case !errors.Is(err, store.ErrNotFound):
+			errs = append(errs, fmt.Errorf("демка %s: %w", sha, err))
+			continue
+		}
+		if err := s.Demos.Delete(sha); err != nil {
+			errs = append(errs, fmt.Errorf("удаление демки %s: %w", sha, err))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // unpack распаковывает файл во временный файл, проверяя лимит размера, и возвращает его путь и sha256.

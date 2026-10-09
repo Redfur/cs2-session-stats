@@ -214,3 +214,54 @@ func TestMissingDemoKeepsResult(t *testing.T) {
 		t.Fatalf("прежние игроки потеряны: %+v", ps)
 	}
 }
+
+// Матч удалён, пока воркер его парсит: результат не сохраняется, матч не появляется снова,
+// очередь обрабатывается дальше.
+func TestMatchDeletedDuringProcessing(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	sess, _ := st.CreateSession(ctx, "2026-10-08", "")
+	deleted, _ := st.AddMatch(ctx, sess.ID, "block", "1.dem")
+	next, _ := st.AddMatch(ctx, sess.ID, "ok-2", "2.dem")
+
+	started, release := make(chan struct{}), make(chan struct{})
+	parse := func(r io.Reader) (parser.Match, error) {
+		b, _ := io.ReadAll(r)
+		if string(b) == "block" {
+			close(started)
+			<-release
+		}
+		return fakeParse(strings.NewReader("ok"))
+	}
+	w := New(st, fakeDemos{}, parse, slog.New(slog.DiscardHandler))
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error)
+	go func() { done <- w.Run(runCtx) }()
+	defer func() { cancel(); <-done }()
+
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("воркер не начал обработку")
+	}
+	if _, err := st.DeleteMatch(ctx, deleted.ID); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+
+	waitStatus(t, st, next.ID, store.StatusDone)
+	if _, err := st.GetMatch(ctx, deleted.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("удалённый матч появился снова: %v", err)
+	}
+	if ps, err := st.MatchPlayers(ctx, deleted.ID); err != nil || len(ps) != 0 {
+		t.Fatalf("статистика удалённого матча сохранена: %d игроков, %v", len(ps), err)
+	}
+	list, _ := st.ListSessionMatches(ctx, sess.ID)
+	if len(list) != 1 || list[0].ID != next.ID || list[0].Ordinal != 1 {
+		t.Fatalf("матчи сессии: %+v", list)
+	}
+}

@@ -63,3 +63,57 @@ func (s *Store) GetSession(ctx context.Context, id int64) (Session, error) {
 	}
 	return x, err
 }
+
+// UpdateSession меняет дату и название сессии. Дату валидирует вызывающий код.
+func (s *Store) UpdateSession(ctx context.Context, id int64, date, title string) (Session, error) {
+	var x Session
+	err := s.db.QueryRowContext(ctx,
+		"UPDATE sessions SET date = ?, title = ? WHERE id = ? RETURNING id, date, title, created_at",
+		date, title, id).
+		Scan(&x.ID, &x.Date, &x.Title, &x.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Session{}, ErrNotFound
+	}
+	return x, err
+}
+
+// DeleteSession удаляет сессию вместе с матчами и их статистикой и возвращает sha256
+// демок удалённых матчей: файлы удаляет вызывающий код после коммита.
+func (s *Store) DeleteSession(ctx context.Context, id int64) ([]string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx, "SELECT sha256 FROM matches WHERE session_id = ?", id)
+	if err != nil {
+		return nil, err
+	}
+	shas := []string{}
+	for rows.Next() {
+		var sha string
+		if err := rows.Scan(&sha); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		shas = append(shas, sha)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// match_players удаляются каскадом
+	if _, err := tx.ExecContext(ctx, "DELETE FROM matches WHERE session_id = ?", id); err != nil {
+		return nil, err
+	}
+	res, err := tx.ExecContext(ctx, "DELETE FROM sessions WHERE id = ?", id)
+	if err != nil {
+		return nil, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, ErrNotFound
+	}
+	return shas, tx.Commit()
+}

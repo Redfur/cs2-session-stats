@@ -23,6 +23,9 @@ var migrationsFS embed.FS
 // ErrNotFound возвращается, когда запрошенная сущность не существует.
 var ErrNotFound = errors.New("не найдено")
 
+// ErrOrderMismatch — новый порядок не совпадает с набором матчей сессии.
+var ErrOrderMismatch = errors.New("список матчей не совпадает с матчами сессии")
+
 type Store struct {
 	db  *sql.DB
 	now func() time.Time

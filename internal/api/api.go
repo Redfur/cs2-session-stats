@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -33,8 +34,12 @@ func (s *Server) Handler(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/sessions", s.listSessions)
 	mux.HandleFunc("POST /api/sessions", s.createSession)
 	mux.HandleFunc("GET /api/sessions/{id}", s.getSession)
+	mux.HandleFunc("PATCH /api/sessions/{id}", s.updateSession)
+	mux.HandleFunc("DELETE /api/sessions/{id}", s.deleteSession)
+	mux.HandleFunc("PUT /api/sessions/{id}/order", s.reorderMatches)
 	mux.HandleFunc("POST /api/sessions/{id}/demos", s.uploadDemos)
 	mux.HandleFunc("GET /api/matches/{id}", s.getMatch)
+	mux.HandleFunc("DELETE /api/matches/{id}", s.deleteMatch)
 	mux.HandleFunc("POST /api/matches/{id}/reparse", s.reparseMatch)
 	mux.HandleFunc("POST /api/sessions/{id}/reparse", s.reparseSession)
 	mux.HandleFunc("GET /api/players", s.listPlayers)
@@ -68,15 +73,11 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "некорректный JSON")
 		return
 	}
-	req.Title = strings.TrimSpace(req.Title)
-	if utf8.RuneCountInString(req.Title) > maxTitleLen {
-		writeError(w, http.StatusBadRequest, "название длиннее 200 символов")
-		return
-	}
 	if req.Date == "" {
 		req.Date = s.now().Format(time.DateOnly)
-	} else if _, err := time.Parse(time.DateOnly, req.Date); err != nil {
-		writeError(w, http.StatusBadRequest, "некорректная дата, ожидается ГГГГ-ММ-ДД")
+	}
+	if msg := req.normalize(); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
 	sess, err := s.Store.CreateSession(r.Context(), req.Date, req.Title)
@@ -85,6 +86,107 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, sess)
+}
+
+// normalize обрезает пробелы в названии и проверяет поля. Возвращает текст ошибки или "".
+func (req *createSessionRequest) normalize() string {
+	req.Title = strings.TrimSpace(req.Title)
+	if utf8.RuneCountInString(req.Title) > maxTitleLen {
+		return "название длиннее 200 символов"
+	}
+	if _, err := time.Parse(time.DateOnly, req.Date); err != nil {
+		return "некорректная дата, ожидается ГГГГ-ММ-ДД"
+	}
+	return ""
+}
+
+// updateSession меняет дату и название. В отличие от создания, дата обязательна:
+// подставлять «сегодня» при правке было бы неожиданно.
+func (s *Server) updateSession(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	var req createSessionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "некорректный JSON")
+		return
+	}
+	if msg := req.normalize(); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
+	}
+	sess, err := s.Store.UpdateSession(r.Context(), id, req.Date, req.Title)
+	if err != nil {
+		s.storeError(w, err, "сессия не найдена")
+		return
+	}
+	writeJSON(w, http.StatusOK, sess)
+}
+
+func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	shas, err := s.Store.DeleteSession(r.Context(), id)
+	if err != nil {
+		s.storeError(w, err, "сессия не найдена")
+		return
+	}
+	s.removeDemos(r, shas)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) deleteMatch(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	m, err := s.Store.DeleteMatch(r.Context(), id)
+	if err != nil {
+		s.storeError(w, err, "матч не найден")
+		return
+	}
+	s.removeDemos(r, []string{m.SHA256})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// removeDemos удаляет файлы демок после коммита удаления. Данные в БД уже удалены,
+// поэтому ошибка только пишется в лог: файл-сирота безвреден.
+func (s *Server) removeDemos(r *http.Request, shas []string) {
+	if len(shas) == 0 {
+		return
+	}
+	if err := s.Ingest.RemoveDemos(context.WithoutCancel(r.Context()), shas); err != nil {
+		s.Log.Warn("файлы демок не удалены", "err", err)
+	}
+}
+
+type reorderRequest struct {
+	MatchIDs []int64 `json:"matchIds"`
+}
+
+func (s *Server) reorderMatches(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	var req reorderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "некорректный JSON")
+		return
+	}
+	matches, err := s.Store.ReorderMatches(r.Context(), id, req.MatchIDs)
+	if errors.Is(err, store.ErrOrderMismatch) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err != nil {
+		s.storeError(w, err, "сессия не найдена")
+		return
+	}
+	writeJSON(w, http.StatusOK, matches)
 }
 
 type sessionResponse struct {

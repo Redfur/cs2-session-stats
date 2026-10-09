@@ -22,6 +22,7 @@ import (
 type testEnv struct {
 	srv   *httptest.Server
 	store *store.Store
+	demos *ingest.LocalStorage
 	woken int
 }
 
@@ -37,7 +38,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	tmp := filepath.Join(dir, "tmp")
 	os.MkdirAll(tmp, 0o755)
 
-	e := &testEnv{store: st}
+	e := &testEnv{store: st, demos: demos}
 	s := &Server{
 		Store:  st,
 		Ingest: &ingest.Service{Store: st, Demos: demos, TmpDir: tmp, MaxSize: 1 << 20},
