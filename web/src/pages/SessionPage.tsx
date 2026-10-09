@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
-import { api, sessionTitle, type SessionDetails, type UploadResult } from '../api'
+import { api, isProcessing, matchStatusLabel, sessionTitle, type SessionDetails, type UploadResult } from '../api'
 import { PlayersTable } from '../components/PlayersTable'
 
 const POLL_MS = 3000
-const statusLabel = { pending: 'в очереди', parsing: 'обрабатывается', done: 'готово', failed: 'ошибка' } as const
 const uploadLabel = { accepted: 'принят', duplicate: 'уже загружен', error: 'ошибка' } as const
 
 export function SessionPage() {
@@ -25,7 +24,7 @@ export function SessionPage() {
   useEffect(load, [load])
 
   // пока есть матчи в обработке — опрашиваем сервер
-  const inProgress = data?.matches.some((m) => m.status === 'pending' || m.status === 'parsing') ?? false
+  const inProgress = data?.matches.some(isProcessing) ?? false
   useEffect(() => {
     if (!inProgress) return
     const t = setInterval(load, POLL_MS)
@@ -36,6 +35,17 @@ export function SessionPage() {
   if (!data) return <p className="muted">Загрузка…</p>
 
   const { session, matches, players } = data
+
+  async function reparseAll() {
+    if (!confirm('Пересчитать все матчи сессии? Пока идёт пересчёт, показываются прежние данные.')) return
+    try {
+      await api.reparseSession(id)
+      load()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+
   return (
     <>
       <h2>{sessionTitle(session)}</h2>
@@ -44,6 +54,14 @@ export function SessionPage() {
       <UploadForm sessionId={id} onUploaded={load} />
 
       <h3>Матчи</h3>
+      {error && <p className="error">{error}</p>}
+      {matches.length > 0 && (
+        <p>
+          <button onClick={reparseAll} disabled={matches.every(isProcessing)}>
+            Пересчитать все матчи
+          </button>
+        </p>
+      )}
       {matches.length === 0 ? (
         <p className="muted">Матчей пока нет.</p>
       ) : (
@@ -64,9 +82,9 @@ export function SessionPage() {
                   <Link to={`/matches/${m.id}`}>{m.ordinal}</Link>
                 </td>
                 <td>{m.map || '—'}</td>
-                <td>{m.status === 'done' ? `${m.scoreA}:${m.scoreB}` : '—'}</td>
+                <td>{m.hasResult ? `${m.scoreA}:${m.scoreB}` : '—'}</td>
                 <td className={m.status === 'failed' ? 'error' : ''}>
-                  {statusLabel[m.status]}
+                  {matchStatusLabel(m)}
                   {m.error ? `: ${m.error}` : ''}
                 </td>
                 <td className="muted">{m.originalName}</td>

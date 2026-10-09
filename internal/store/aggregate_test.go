@@ -20,7 +20,7 @@ func TestSessionPlayers(t *testing.T) {
 			t.Fatal(err)
 		}
 		p.Rounds = rounds
-		if err := s.SaveMatchResult(ctx, m.ID, MatchResult{Rounds: rounds, Players: []stats.PlayerStats{p}}); err != nil {
+		if err := s.SaveMatchResult(ctx, m.ID, MatchResult{Rounds: rounds, Players: []stats.PlayerStats{p}}, 1); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -31,11 +31,9 @@ func TestSessionPlayers(t *testing.T) {
 	// матч 2: 30 раундов, урон 2400, KAST 27, 30 убийств (3 в голову), ник сменился
 	addDone("m2", 30, stats.PlayerStats{SteamID: alice, Name: "alice", Team: "B", Result: stats.Loss,
 		Counters: stats.Counters{Kills: 30, HSKills: 3, Deaths: 18, Damage: 2400, KASTRounds: 27, K1: 10, K2: 5, K3: 2, K5: 1}})
-	// матч 3: failed — не должен попасть в агрегаты
+	// матч 3: failed при первой обработке (результата нет) — не должен попасть в агрегаты
 	m3, _ := s.AddMatch(ctx, sess.ID, "m3", "m3.dem")
-	s.SaveMatchResult(ctx, m3.ID, MatchResult{Rounds: 10, Players: []stats.PlayerStats{{SteamID: alice, Name: "x", Team: "A", Result: stats.Win,
-		Counters: stats.Counters{Rounds: 10, Kills: 99, Damage: 9999}}}})
-	s.FailMatch(ctx, m3.ID, "ошибка")
+	s.FailMatch(ctx, m3.ID, "ошибка", 1)
 
 	players, err := s.SessionPlayers(ctx, sess.ID)
 	if err != nil {
@@ -65,4 +63,28 @@ func TestSessionPlayers(t *testing.T) {
 	if math.Abs(p.Rating()-want) > 1e-9 {
 		t.Errorf("rating = %v, ожидалось %v", p.Rating(), want)
 	}
+}
+
+// Матч с результатом входит в итоги, пока пересчитывается и после неудачного пересчёта.
+func TestSessionPlayersDuringReprocessing(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	p := stats.PlayerStats{SteamID: 1, Name: "a", Team: "A", Result: stats.Win, Counters: stats.Counters{Rounds: 10, Kills: 7}}
+	m, _ := s.AddMatch(ctx, sess.ID, "m", "m.dem")
+	s.SaveMatchResult(ctx, m.ID, MatchResult{Rounds: 10, Players: []stats.PlayerStats{p}}, 1)
+
+	check := func(stage string) {
+		t.Helper()
+		players, err := s.SessionPlayers(ctx, sess.ID)
+		if err != nil || len(players) != 1 || players[0].Kills != 7 {
+			t.Fatalf("%s: %+v err=%v", stage, players, err)
+		}
+	}
+	s.RequeueMatch(ctx, m.ID)
+	check("в очереди на пересчёт")
+	s.ClaimNextPending(ctx)
+	check("пересчитывается")
+	s.FailMatch(ctx, m.ID, "ошибка", 2)
+	check("пересчёт не удался")
 }

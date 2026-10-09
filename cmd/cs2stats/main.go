@@ -26,8 +26,11 @@ import (
 )
 
 const usage = `использование:
-  cs2stats              запустить сервис (HTTP API + воркер)
-  cs2stats parse FILE   разобрать демку и вывести статистику в JSON`
+  cs2stats                                        запустить сервис (HTTP API + воркер)
+  cs2stats parse FILE                             разобрать демку и вывести статистику в JSON
+  cs2stats reparse --match ID | --session ID | --all
+                                                  поставить матчи в очередь на пересчёт
+                                                  (их обработает запущенный сервис)`
 
 func main() {
 	args := os.Args[1:]
@@ -38,6 +41,15 @@ func main() {
 		}
 	case args[0] == "parse" && len(args) == 2:
 		if err := parseCmd(args[1]); err != nil {
+			log.Fatal(err)
+		}
+	case args[0] == "reparse":
+		target, err := parseReparseArgs(args[1:])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n\n%s\n", err, usage)
+			os.Exit(2)
+		}
+		if err := reparseCmd(target); err != nil {
 			log.Fatal(err)
 		}
 	default:

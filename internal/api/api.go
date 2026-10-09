@@ -35,6 +35,8 @@ func (s *Server) Handler(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/sessions/{id}", s.getSession)
 	mux.HandleFunc("POST /api/sessions/{id}/demos", s.uploadDemos)
 	mux.HandleFunc("GET /api/matches/{id}", s.getMatch)
+	mux.HandleFunc("POST /api/matches/{id}/reparse", s.reparseMatch)
+	mux.HandleFunc("POST /api/sessions/{id}/reparse", s.reparseSession)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "неизвестный метод API")
 	})
@@ -155,8 +157,8 @@ func (s *Server) uploadDemos(w http.ResponseWriter, r *http.Request) {
 		}
 		results = append(results, res)
 	}
-	if accepted && s.Wake != nil {
-		s.Wake()
+	if accepted {
+		s.wake()
 	}
 	if len(results) == 0 {
 		writeError(w, http.StatusBadRequest, "не выбрано ни одного файла")
@@ -196,6 +198,46 @@ func (s *Server) getMatch(w http.ResponseWriter, r *http.Request) {
 		return players[i].Rating > players[j].Rating
 	})
 	writeJSON(w, http.StatusOK, matchResponse{Match: m, Players: players})
+}
+
+func (s *Server) reparseMatch(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	m, err := s.Store.RequeueMatch(r.Context(), id)
+	if err != nil {
+		s.storeError(w, err, "матч не найден")
+		return
+	}
+	s.wake()
+	writeJSON(w, http.StatusAccepted, m)
+}
+
+func (s *Server) reparseSession(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	if _, err := s.Store.GetSession(r.Context(), id); err != nil {
+		s.storeError(w, err, "сессия не найдена")
+		return
+	}
+	n, err := s.Store.RequeueSession(r.Context(), id)
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	if n > 0 {
+		s.wake()
+	}
+	writeJSON(w, http.StatusAccepted, map[string]int64{"queued": n})
+}
+
+func (s *Server) wake() {
+	if s.Wake != nil {
+		s.Wake()
+	}
 }
 
 func (s *Server) now() time.Time {

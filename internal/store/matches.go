@@ -32,6 +32,11 @@ type Match struct {
 	ScoreB       int         `json:"scoreB"`
 	CreatedAt    string      `json:"createdAt"`
 	ParsedAt     *string     `json:"parsedAt,omitempty"`
+	// HasResult — у матча есть посчитанный результат; он сохраняется, пока матч
+	// пересчитывается, и при неудачном пересчёте.
+	HasResult bool `json:"hasResult"`
+	// ProcessedVersion — версия обработки последней завершённой попытки (0 — не обрабатывался).
+	ProcessedVersion int `json:"processedVersion"`
 }
 
 // MatchResult — результат обработки демки.
@@ -51,7 +56,7 @@ func (e *DuplicateError) Error() string {
 }
 
 const matchColumns = `id, session_id, ordinal, sha256, original_name, status, error, map, rounds,
-	score_a, score_b, created_at, parsed_at`
+	score_a, score_b, created_at, parsed_at, has_result, processed_version`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -59,7 +64,7 @@ func scanMatch(row scanner) (Match, error) {
 	var m Match
 	var parsedAt sql.NullString
 	err := row.Scan(&m.ID, &m.SessionID, &m.Ordinal, &m.SHA256, &m.OriginalName, &m.Status, &m.Error,
-		&m.Map, &m.Rounds, &m.ScoreA, &m.ScoreB, &m.CreatedAt, &parsedAt)
+		&m.Map, &m.Rounds, &m.ScoreA, &m.ScoreB, &m.CreatedAt, &parsedAt, &m.HasResult, &m.ProcessedVersion)
 	if parsedAt.Valid {
 		m.ParsedAt = &parsedAt.String
 	}
@@ -129,12 +134,13 @@ func (s *Store) ListSessionMatches(ctx context.Context, sessionID int64) ([]Matc
 	return list, rows.Err()
 }
 
-// ClaimNextPending переводит самый старый pending-матч в parsing и возвращает его.
-// ok=false, если очередь пуста.
+// ClaimNextPending переводит следующий pending-матч в parsing и возвращает его.
+// Матчи без результата (новые загрузки) идут раньше пересчётов, чтобы массовый
+// пересчёт не задерживал свежие демки. ok=false, если очередь пуста.
 func (s *Store) ClaimNextPending(ctx context.Context) (m Match, ok bool, err error) {
 	m, err = scanMatch(s.db.QueryRowContext(ctx, `
 		UPDATE matches SET status = ?
-		WHERE id = (SELECT id FROM matches WHERE status = ? ORDER BY id LIMIT 1)
+		WHERE id = (SELECT id FROM matches WHERE status = ? ORDER BY has_result, id LIMIT 1)
 		RETURNING `+matchColumns, StatusParsing, StatusPending))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Match{}, false, nil
@@ -151,8 +157,8 @@ func (s *Store) ResetParsing(ctx context.Context) (int64, error) {
 	return res.RowsAffected()
 }
 
-// SaveMatchResult сохраняет результат парсинга и переводит матч в done.
-func (s *Store) SaveMatchResult(ctx context.Context, matchID int64, r MatchResult) error {
+// SaveMatchResult атомарно заменяет результат матча, полученный версией обработки version, и переводит матч в done.
+func (s *Store) SaveMatchResult(ctx context.Context, matchID int64, r MatchResult, version int) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -174,8 +180,9 @@ func (s *Store) SaveMatchResult(ctx context.Context, matchID int64, r MatchResul
 		}
 	}
 	res, err := tx.ExecContext(ctx, `
-		UPDATE matches SET status = ?, error = '', map = ?, rounds = ?, score_a = ?, score_b = ?, parsed_at = ?
-		WHERE id = ?`, StatusDone, r.Map, r.Rounds, r.ScoreA, r.ScoreB, s.timestamp(), matchID)
+		UPDATE matches SET status = ?, error = '', map = ?, rounds = ?, score_a = ?, score_b = ?, parsed_at = ?,
+			has_result = 1, processed_version = ?
+		WHERE id = ?`, StatusDone, r.Map, r.Rounds, r.ScoreA, r.ScoreB, s.timestamp(), version, matchID)
 	if err != nil {
 		return err
 	}
@@ -185,11 +192,12 @@ func (s *Store) SaveMatchResult(ctx context.Context, matchID int64, r MatchResul
 	return tx.Commit()
 }
 
-// FailMatch переводит матч в failed с текстом ошибки.
-func (s *Store) FailMatch(ctx context.Context, matchID int64, msg string) error {
+// FailMatch переводит матч в failed с текстом ошибки. Прежний результат матча
+// (игроки, счёт, has_result) не трогается.
+func (s *Store) FailMatch(ctx context.Context, matchID int64, msg string, version int) error {
 	_, err := s.db.ExecContext(ctx,
-		"UPDATE matches SET status = ?, error = ?, parsed_at = ? WHERE id = ?",
-		StatusFailed, msg, s.timestamp(), matchID)
+		"UPDATE matches SET status = ?, error = ?, parsed_at = ?, processed_version = ? WHERE id = ?",
+		StatusFailed, msg, s.timestamp(), version, matchID)
 	return err
 }
 

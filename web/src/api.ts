@@ -27,6 +27,9 @@ export interface Match {
   scoreB: number
   createdAt: string
   parsedAt?: string
+  // есть посчитанный результат; сохраняется во время пересчёта и при его ошибке
+  hasResult: boolean
+  processedVersion: number
 }
 
 export interface PlayerRow {
@@ -95,6 +98,8 @@ export const api = {
     request<Session>('POST', '/api/sessions', { date, title }),
   getSession: (id: string) => request<SessionDetails>('GET', `/api/sessions/${id}`),
   getMatch: (id: string) => request<MatchDetails>('GET', `/api/matches/${id}`),
+  reparseMatch: (id: string | number) => request<Match>('POST', `/api/matches/${id}/reparse`),
+  reparseSession: (id: string) => request<{ queued: number }>('POST', `/api/sessions/${id}/reparse`),
 
   // XHR вместо fetch: у fetch нет прогресса отправки, а демки весят сотни мегабайт.
   uploadDemos(sessionId: string, files: File[], onProgress: (loaded: number, total: number) => void) {
@@ -118,6 +123,24 @@ export const api = {
       xhr.send(form)
     })
   },
+}
+
+export function isProcessing(m: Match): boolean {
+  return m.status === 'pending' || m.status === 'parsing'
+}
+
+// Подпись статуса с учётом пересчёта: у матча с результатом pending/parsing/failed — это пересчёт.
+export function matchStatusLabel(m: Match): string {
+  switch (m.status) {
+    case 'pending':
+      return m.hasResult ? 'пересчёт в очереди' : 'в очереди'
+    case 'parsing':
+      return m.hasResult ? 'пересчитывается' : 'обрабатывается'
+    case 'done':
+      return 'готово'
+    case 'failed':
+      return m.hasResult ? 'ошибка пересчёта' : 'ошибка'
+  }
 }
 
 export function todayISO(): string {

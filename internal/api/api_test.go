@@ -151,7 +151,7 @@ func TestUploadAndViews(t *testing.T) {
 	e.store.SaveMatchResult(ctx, matchID, store.MatchResult{Map: "de_nuke", Rounds: 20, ScoreA: 13, ScoreB: 7, Players: []stats.PlayerStats{
 		{SteamID: 76561198000000001, Name: "alice", Team: "A", Result: stats.Win, Counters: stats.Counters{Rounds: 20, Kills: 20, Damage: 1600}},
 		{SteamID: 76561198000000002, Name: "bob", Team: "B", Result: stats.Loss, Counters: stats.Counters{Rounds: 20, Deaths: 20}},
-	}})
+	}}, 1)
 
 	var sr struct {
 		Session store.Session `json:"session"`

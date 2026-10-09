@@ -15,22 +15,23 @@ type SessionPlayer struct {
 	stats.Counters
 }
 
-// SessionPlayers суммирует сырые счётчики игроков по матчам сессии в статусе done.
+// SessionPlayers суммирует сырые счётчики игроков по матчам сессии, у которых есть результат,
+// включая пересчитываемые и матчи с неудачным пересчётом (у них сохранён прежний результат).
 // Производные показатели считаются из сумм, поэтому ADR, KAST%, HS% и rating
 // автоматически взвешены по раундам и убийствам.
 func (s *Store) SessionPlayers(ctx context.Context, sessionID int64) ([]SessionPlayer, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT mp.steam_id,
 			(SELECT mp2.name FROM match_players mp2 JOIN matches m2 ON m2.id = mp2.match_id
-			 WHERE mp2.steam_id = mp.steam_id AND m2.session_id = m.session_id AND m2.status = ?
+			 WHERE mp2.steam_id = mp.steam_id AND m2.session_id = m.session_id AND m2.has_result = 1
 			 ORDER BY m2.ordinal DESC LIMIT 1),
 			count(*), sum(mp.result = 'win'),
 			sum(mp.rounds), sum(mp.kills), sum(mp.deaths), sum(mp.assists), sum(mp.hs_kills), sum(mp.damage),
 			sum(mp.kast_rounds), sum(mp.k1), sum(mp.k2), sum(mp.k3), sum(mp.k4), sum(mp.k5),
 			sum(mp.opening_kills), sum(mp.opening_deaths)
 		FROM match_players mp JOIN matches m ON m.id = mp.match_id
-		WHERE m.session_id = ? AND m.status = ?
-		GROUP BY mp.steam_id`, StatusDone, sessionID, StatusDone)
+		WHERE m.session_id = ? AND m.has_result = 1
+		GROUP BY mp.steam_id`, sessionID)
 	if err != nil {
 		return nil, err
 	}

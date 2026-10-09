@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -11,12 +12,16 @@ import (
 	"time"
 
 	"cs2stats/internal/parser"
+	"cs2stats/internal/stats"
 	"cs2stats/internal/store"
 )
 
 type fakeDemos struct{}
 
 func (fakeDemos) Open(sha string) (io.ReadCloser, error) {
+	if sha == "missing" {
+		return nil, fs.ErrNotExist
+	}
 	return io.NopCloser(strings.NewReader(sha)), nil
 }
 
@@ -136,4 +141,76 @@ func TestShutdownDuringParse(t *testing.T) {
 	defer cancel()
 	go New(st, fakeDemos{}, fakeParse, slog.New(slog.DiscardHandler)).Run(runCtx)
 	waitStatus(t, st, m.ID, store.StatusDone)
+}
+
+func openStore(t *testing.T) *store.Store {
+	t.Helper()
+	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	return st
+}
+
+func runWorker(t *testing.T, st *store.Store) *Worker {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	w := New(st, fakeDemos{}, fakeParse, slog.New(slog.DiscardHandler))
+	done := make(chan struct{})
+	go func() { w.Run(ctx); close(done) }()
+	t.Cleanup(func() { cancel(); <-done })
+	return w
+}
+
+// При старте матчи, обработанные старой версией, пересчитываются; актуальные — нет.
+func TestRequeueOutdatedOnStart(t *testing.T) {
+	st := openStore(t)
+	ctx := context.Background()
+	sess, _ := st.CreateSession(ctx, "2026-10-08", "")
+	old, _ := st.AddMatch(ctx, sess.ID, "ok-old", "old.dem")
+	cur, _ := st.AddMatch(ctx, sess.ID, "ok-cur", "cur.dem")
+	for _, x := range []struct {
+		id      int64
+		version int
+	}{{old.ID, ProcessingVersion - 1}, {cur.ID, ProcessingVersion}} {
+		st.ClaimNextPending(ctx)
+		st.SaveMatchResult(ctx, x.id, store.MatchResult{Map: "stale", Rounds: 1}, x.version)
+	}
+
+	runWorker(t, st)
+	got := waitStatus(t, st, old.ID, store.StatusDone)
+	deadline := time.Now().Add(5 * time.Second)
+	for got.Map != "de_mirage" && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+		got, _ = st.GetMatch(ctx, old.ID)
+	}
+	if got.Map != "de_mirage" || got.ProcessedVersion != ProcessingVersion {
+		t.Fatalf("устаревший матч не пересчитан: %+v", got)
+	}
+	if c, _ := st.GetMatch(ctx, cur.ID); c.Map != "stale" {
+		t.Fatalf("актуальный матч пересчитан: %+v", c)
+	}
+}
+
+// Пересчёт без исходной демки: ошибка, прежний результат сохранён.
+func TestMissingDemoKeepsResult(t *testing.T) {
+	st := openStore(t)
+	ctx := context.Background()
+	sess, _ := st.CreateSession(ctx, "2026-10-08", "")
+	m, _ := st.AddMatch(ctx, sess.ID, "missing", "m.dem")
+	st.ClaimNextPending(ctx)
+	players := []stats.PlayerStats{{SteamID: 1, Name: "a", Team: "A", Result: stats.Win, Counters: stats.Counters{Rounds: 5, Kills: 4}}}
+	st.SaveMatchResult(ctx, m.ID, store.MatchResult{Map: "de_nuke", Rounds: 5, ScoreA: 5, Players: players}, ProcessingVersion)
+
+	w := runWorker(t, st)
+	st.RequeueMatch(ctx, m.ID)
+	w.Wake()
+	got := waitStatus(t, st, m.ID, store.StatusFailed)
+	if got.Error != "исходная демка не найдена" || !got.HasResult || got.Map != "de_nuke" {
+		t.Fatalf("матч: %+v", got)
+	}
+	if ps, _ := st.MatchPlayers(ctx, m.ID); len(ps) != 1 || ps[0].Kills != 4 {
+		t.Fatalf("прежние игроки потеряны: %+v", ps)
+	}
 }

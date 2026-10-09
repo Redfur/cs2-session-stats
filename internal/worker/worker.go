@@ -3,8 +3,10 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"time"
 
@@ -12,6 +14,14 @@ import (
 	"cs2stats/internal/stats"
 	"cs2stats/internal/store"
 )
+
+// ProcessingVersion — версия конвейера «демка → счётчики» (internal/parser и internal/stats).
+// Её НУЖНО увеличить при любом изменении, которое меняет сохраняемые в БД счётчики
+// (исправление парсера, новые правила подсчёта K/D/A, урона, KAST и т.п.): при старте
+// сервис сам поставит в очередь на пересчёт матчи, обработанные более старой версией.
+// Изменения формул производных показателей (rating, ADR, проценты) версию не требуют —
+// они считаются из счётчиков при чтении.
+const ProcessingVersion = 1
 
 // DemoOpener открывает сохранённую демку по sha256.
 type DemoOpener interface {
@@ -51,6 +61,11 @@ func (w *Worker) Run(ctx context.Context) error {
 	if n > 0 {
 		w.log.Info("прерванные матчи возвращены в очередь", "count", n)
 	}
+	if n, err := w.store.RequeueOutdated(ctx, ProcessingVersion); err != nil {
+		return fmt.Errorf("постановка устаревших матчей на пересчёт: %w", err)
+	} else if n > 0 {
+		w.log.Info("матчи поставлены на пересчёт новой версией обработки", "count", n, "version", ProcessingVersion)
+	}
 	for {
 		if err := w.drain(ctx); err != nil {
 			if ctx.Err() != nil {
@@ -82,7 +97,7 @@ func (w *Worker) drain(ctx context.Context) error {
 				return ctx.Err()
 			}
 			w.log.Warn("матч не обработан", "match", m.ID, "file", m.OriginalName, "err", err)
-			if ferr := w.store.FailMatch(context.WithoutCancel(ctx), m.ID, err.Error()); ferr != nil {
+			if ferr := w.store.FailMatch(context.WithoutCancel(ctx), m.ID, err.Error(), ProcessingVersion); ferr != nil {
 				return ferr
 			}
 			continue
@@ -99,6 +114,9 @@ func (w *Worker) process(ctx context.Context, m store.Match) (err error) {
 		}
 	}()
 	f, err := w.demos.Open(m.SHA256)
+	if errors.Is(err, fs.ErrNotExist) {
+		return errors.New("исходная демка не найдена")
+	}
 	if err != nil {
 		return fmt.Errorf("открытие демки: %w", err)
 	}
@@ -114,5 +132,5 @@ func (w *Worker) process(ctx context.Context, m store.Match) (err error) {
 		ScoreA:  match.ScoreA,
 		ScoreB:  match.ScoreB,
 		Players: stats.Compute(match),
-	})
+	}, ProcessingVersion)
 }
