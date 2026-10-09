@@ -1,9 +1,10 @@
+import { Link } from 'react-router'
 import type { PlayerRow } from '../api'
 
 const resultLabel = { win: 'П', loss: 'Пр', draw: 'Н' } as const
 
-// Таблица статистики игроков: для матча (scoreboard) и для сессии (сводная, с колонками матчей и побед).
-export function PlayersTable({ players, session = false }: { players: PlayerRow[]; session?: boolean }) {
+// Таблица статистики игроков: для матча (scoreboard) и сводная по нескольким матчам (aggregate: колонки матчей и побед).
+export function PlayersTable({ players, aggregate = false }: { players: PlayerRow[]; aggregate?: boolean }) {
   if (players.length === 0) return <p className="muted">Нет данных.</p>
   return (
     <div className="table-wrap">
@@ -11,7 +12,7 @@ export function PlayersTable({ players, session = false }: { players: PlayerRow[
         <thead>
           <tr>
             <th>Игрок</th>
-            {session ? (
+            {aggregate ? (
               <>
                 <th title="Матчей">М</th>
                 <th title="Побед">П</th>
@@ -38,11 +39,9 @@ export function PlayersTable({ players, session = false }: { players: PlayerRow[
           {players.map((p) => (
             <tr key={p.steamId}>
               <td>
-                <a href={`https://steamcommunity.com/profiles/${p.steamId}`} target="_blank" rel="noreferrer">
-                  {p.name}
-                </a>
+                <Link to={`/players/${p.steamId}`}>{p.name}</Link>
               </td>
-              {session ? (
+              {aggregate ? (
                 <>
                   <td>{p.matches ?? 0}</td>
                   <td>{p.wins ?? 0}</td>

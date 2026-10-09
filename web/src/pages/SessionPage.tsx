@@ -95,7 +95,7 @@ export function SessionPage() {
       )}
 
       <h3>Итоги сессии</h3>
-      <PlayersTable players={players} session />
+      <PlayersTable players={players} aggregate />
     </>
   )
 }

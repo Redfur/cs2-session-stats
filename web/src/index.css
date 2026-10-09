@@ -6,3 +6,6 @@ th:first-child, td:first-child { text-align: left; }
 .error { color: #b00020; }
 .muted { color: #777; }
 .table-wrap { overflow-x: auto; }
+.checklist { max-height: 200px; overflow-y: auto; border: 1px solid #ccc; padding: 4px 8px; margin: 4px 0; max-width: 480px; }
+.checklist label { display: block; }
+fieldset { margin: 8px 0; max-width: 520px; }

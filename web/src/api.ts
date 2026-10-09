@@ -71,6 +71,38 @@ export interface MatchDetails {
   players: PlayerRow[]
 }
 
+export interface PlayersResponse {
+  players: PlayerRow[]
+}
+
+export interface ProfileSession extends PlayerRow {
+  session: Session
+}
+
+export interface ProfileMap extends PlayerRow {
+  map: string
+}
+
+export interface ProfileMatch extends PlayerRow {
+  matchId: number
+  sessionId: number
+  sessionDate: string
+  sessionTitle: string
+  ordinal: number
+  map: string
+  scoreA: number
+  scoreB: number
+}
+
+export interface PlayerProfile {
+  steamId: string
+  name: string
+  totals: PlayerRow
+  sessions: ProfileSession[]
+  maps: ProfileMap[]
+  matches: ProfileMatch[]
+}
+
 export interface UploadResult {
   fileName: string
   status: 'accepted' | 'duplicate' | 'error'
@@ -100,6 +132,9 @@ export const api = {
   getMatch: (id: string) => request<MatchDetails>('GET', `/api/matches/${id}`),
   reparseMatch: (id: string | number) => request<Match>('POST', `/api/matches/${id}/reparse`),
   reparseSession: (id: string) => request<{ queued: number }>('POST', `/api/sessions/${id}/reparse`),
+  // query — строка параметров фильтра без «?» (from, to, session, player, together, minMatches)
+  listPlayers: (query: string) => request<PlayersResponse>('GET', `/api/players?${query}`),
+  getPlayer: (steamId: string, query: string) => request<PlayerProfile>('GET', `/api/players/${steamId}?${query}`),
 
   // XHR вместо fetch: у fetch нет прогресса отправки, а демки весят сотни мегабайт.
   uploadDemos(sessionId: string, files: File[], onProgress: (loaded: number, total: number) => void) {
