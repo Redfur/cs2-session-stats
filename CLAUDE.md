@@ -108,4 +108,5 @@ web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI 
 - `pkill -f <шаблон>` может убить собственный shell, если шаблон встречается в его командной строке.
 - Сборка Docker иногда виснет на `load metadata for docker.io/library/golang:...`. Помогает отдельный `docker pull golang:1.27-alpine`.
 - Обёртке таблицы с `overflow-x-auto` нужен `relative`: иначе `sr-only` (absolute) внутри неё растягивает всю страницу по горизонтали.
+- `npm ci` внутри `docker build` может падать с `ETIMEDOUT` из-за сети WSL/Docker при многих параллельных загрузках. Для локальной проверки помогает копия Dockerfile с `ENV npm_config_maxsockets=2` перед `npm ci`.
 - Контейнер работает от UID/GID 1000 (`user:` в compose), чтобы писать в смонтированный `./data`.
