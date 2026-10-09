@@ -47,6 +47,11 @@ func Parse(r io.Reader) (m Match, err error) {
 	})
 	p.RegisterEventHandler(func(events.MatchStart) { b.reset() })
 	p.RegisterEventHandler(func(events.RoundStart) { b.roundStart() })
+	p.RegisterEventHandler(func(e events.MatchStartedChanged) {
+		if !e.NewIsStarted {
+			b.cur = -1 // матч окончен: события после него (например, суициды) не учитываем
+		}
+	})
 	p.RegisterEventHandler(b.onKill)
 	p.RegisterEventHandler(b.onHurt)
 	p.RegisterEventHandler(b.onRoundEnd)
@@ -89,6 +94,7 @@ func (b *builder) roundStart() {
 		b.cur = -1
 		return
 	}
+	b.dropRestartedRounds(gs.TotalRoundsPlayed())
 	playing := gs.Participants().Playing()
 	if !b.sideAKnow {
 		// команда A — та, что начала матч за CT
@@ -117,6 +123,28 @@ func (b *builder) roundStart() {
 	b.cur = len(b.rounds) - 1
 	for _, pl := range playing {
 		b.id(pl)
+	}
+}
+
+// dropRestartedRounds сверяет собранные раунды с числом сыгранных раундов по данным игры.
+// Рестарт (mp_restartgame) не всегда сопровождается событием MatchStart: например, в демках
+// FastCup первый раунд записи не засчитывается игрой. Если игра насчитала меньше раундов,
+// чем собрано, лишние ранние раунды отбрасываются; при обнулении — сбрасываем всё, как при старте матча.
+func (b *builder) dropRestartedRounds(played int) {
+	completed := 0
+	for _, r := range b.rounds {
+		if r.Winner != "" {
+			completed++
+		}
+	}
+	switch {
+	case played >= completed:
+		return
+	case played == 0:
+		b.reset()
+	default:
+		b.rounds = b.rounds[len(b.rounds)-played:]
+		b.cur = -1
 	}
 }
 
@@ -151,9 +179,7 @@ func (b *builder) onKill(e events.Kill) {
 		Victim:   b.id(e.Victim),
 		Headshot: e.IsHeadshot,
 	}
-	if !e.AssistedFlash {
-		k.Assister = b.id(e.Assister)
-	}
+	k.Assister = b.id(e.Assister) // включая флеш-ассисты, как в табло CS2 и FastCup
 	if k.Victim == 0 {
 		return
 	}

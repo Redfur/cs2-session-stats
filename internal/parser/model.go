@@ -22,7 +22,7 @@ type Kill struct {
 	Time     time.Duration // время от начала демки
 	Killer   uint64        // 0 — мир (падение, бомба и т.п.)
 	Victim   uint64
-	Assister uint64 // 0 — нет ассиста; флеш-ассисты не учитываются
+	Assister uint64 // 0 — нет ассиста; флеш-ассист тоже считается ассистом
 	Headshot bool
 }
 
