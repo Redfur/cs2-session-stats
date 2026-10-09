@@ -84,6 +84,16 @@
   --breakpoint-md: 45rem;
 }
 
+/* Шкала доли в паре дуэлей: разгром → проигрыш → поровну → выигрыш → разгром.
+   static: цвета берутся через var() в стилях компонента, а не классами, и иначе не попали бы в сборку. */
+@theme static {
+  --color-duel-1: #f25f5c;
+  --color-duel-2: #f5a65a;
+  --color-duel-3: #6f757b;
+  --color-duel-4: #c9d857;
+  --color-duel-5: #41c463;
+}
+
 @layer base {
   html {
     color-scheme: dark;

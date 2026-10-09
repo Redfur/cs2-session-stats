@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router'
 import { api, isProcessing, sessionTitle, type Match, type SessionDetails } from '../api'
 import { InlineEdit } from '../components/InlineEdit'
 import { MatchesTable } from '../components/MatchesTable'
+import { SessionDuelsCard } from '../components/Duels'
 import { PageError, PageLoading } from '../components/PageState'
 import { PLAYER_TOTAL_COLUMNS, PLAYER_TOTAL_MIN_WIDTH, RATING_DESC } from '../components/playerColumns'
 import { Alert } from '../components/ui/Alert'
@@ -264,6 +265,23 @@ export function SessionPage() {
             minWidth={PLAYER_TOTAL_MIN_WIDTH}
           />
         </Card>
+      )}
+
+      {withResult > 0 && (
+        <SessionDuelsCard
+          sessionId={id}
+          version={matches.map((m) => `${m.id}:${m.status}:${m.processedVersion}`).join(',')}
+          reparsing={isReparsing}
+          onReparse={async (ids) => {
+            setActionError(null)
+            try {
+              for (const matchId of ids) await api.reparseMatch(matchId)
+            } catch (err) {
+              setActionError({ title: 'Не удалось поставить пересчёт.', text: (err as Error).message })
+            }
+            load()
+          }}
+        />
       )}
 
       {actionError && (

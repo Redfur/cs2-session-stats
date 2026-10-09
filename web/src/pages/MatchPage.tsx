@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, LoaderCircle, RefreshCw, Trash } from 'lucid
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { api, isProcessing, sessionTitle, type MatchDetails, type PlayerRow, type SessionDetails } from '../api'
+import { MatchDuelsCard } from '../components/Duels'
 import { PageError, PageLoading } from '../components/PageState'
 import { PLAYER_MATCH_COLUMNS, PLAYER_MATCH_MIN_WIDTH, RATING_DESC } from '../components/playerColumns'
 import { Alert } from '../components/ui/Alert'
@@ -162,6 +163,15 @@ export function MatchPage() {
           />
           <TeamCard team="A" own={match.scoreA} other={match.scoreB} players={players} sort={sort} onSort={toggle} />
           <TeamCard team="B" own={match.scoreB} other={match.scoreA} players={players} sort={sort} onSort={toggle} />
+          <MatchDuelsCard
+            matchId={match.id}
+            version={`${match.status}|${match.processedVersion}|${match.parsedAt ?? ''}`}
+            reparsing={processing}
+            onReparse={async () => {
+              const m = await api.reparseMatch(id)
+              setData((d) => (d ? { ...d, match: m } : d))
+            }}
+          />
         </>
       )}
 

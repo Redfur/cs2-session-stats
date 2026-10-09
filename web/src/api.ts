@@ -111,6 +111,61 @@ export interface PlayerProfile {
   matches: ProfileMatch[]
 }
 
+// Состояние расчёта дуэлей выборки: нет матчей, ни у одного матча нет дуэлей, не у всех, у всех.
+export type DuelsStatus = 'no_matches' | 'unavailable' | 'partial' | 'complete'
+
+export interface DuelPlayer {
+  steamId: string
+  name: string
+  team?: 'A' | 'B'
+}
+
+// Личный счёт пары: kills — убийства killer против victim, deaths — обратные,
+// share — доля kills / (kills + deaths), null при 0:0; maps — матчей, где пара была соперниками.
+export interface DuelCell {
+  killerId: string
+  victimId: string
+  kills: number
+  deaths: number
+  share: number | null
+  maps: number
+}
+
+export interface MatchDuels {
+  status: 'complete' | 'unavailable'
+  players: DuelPlayer[]
+  cells: DuelCell[]
+}
+
+export interface SessionDuels {
+  status: DuelsStatus
+  eligibleMatches: number
+  coveredMatches: number
+  // матчи с результатом, обработанные до появления дуэлей
+  uncoveredMatches: { id: number; ordinal: number }[]
+  players: DuelPlayer[]
+  cells: DuelCell[]
+}
+
+export interface Opponent {
+  steamId: string
+  name: string
+  kills: number
+  deaths: number
+  share: number | null
+  maps: number
+}
+
+export interface PlayerDuels {
+  status: DuelsStatus
+  eligibleMatches: number
+  coveredMatches: number
+  coveredSessions: number
+  mostKilled: Opponent[]
+  mostKilledBy: Opponent[]
+  opponents: Opponent[]
+}
+
 export interface UploadResult {
   fileName: string
   status: 'accepted' | 'duplicate' | 'error'
@@ -151,6 +206,9 @@ export const api = {
   // query — строка параметров фильтра без «?» (from, to, session, player, together, minMatches)
   listPlayers: (query: string) => request<PlayersResponse>('GET', `/api/players?${query}`),
   getPlayer: (steamId: string, query: string) => request<PlayerProfile>('GET', `/api/players/${steamId}?${query}`),
+  getMatchDuels: (id: string | number) => request<MatchDuels>('GET', `/api/matches/${id}/duels`),
+  getSessionDuels: (id: string | number) => request<SessionDuels>('GET', `/api/sessions/${id}/duels`),
+  getPlayerDuels: (steamId: string, query: string) => request<PlayerDuels>('GET', `/api/players/${steamId}/duels?${query}`),
 
   // Отправляет один файл. XHR вместо fetch: у fetch нет прогресса отправки, а демки весят сотни мегабайт.
   // При signal.abort() отправка обрывается, промис отклоняется с DOMException AbortError.

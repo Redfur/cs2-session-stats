@@ -2,6 +2,7 @@ import { ExternalLink } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { api, sessionTitle, type PlayerProfile, type ProfileMap, type ProfileMatch, type ProfileSession } from '../api'
+import { RivalsCard } from '../components/Duels'
 import { PageError, PageLoading } from '../components/PageState'
 import { PeriodBar } from '../components/PeriodFilter'
 import { PLAYER_TOTAL_COLUMNS, PLAYER_TOTAL_MIN_WIDTH, RATING_DESC } from '../components/playerColumns'
@@ -243,6 +244,8 @@ export function PlayerPage() {
         />
         <Breakdown id="pm-h" title="По картам" columns={MAP_COLUMNS} rows={data.maps} rowKey={(m) => m.map} sort={sm} minWidth={380} />
       </div>
+
+      <RivalsCard steamId={steamId} name={data.name} query={query} />
 
       <Breakdown
         id="mm-h"
