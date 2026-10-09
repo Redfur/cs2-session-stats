@@ -1,0 +1,7 @@
+/data/
+node_modules/
+*.dem
+*.dem.*
+internal/webui/dist/
+/cs2stats
+!internal/ingest/testdata/*

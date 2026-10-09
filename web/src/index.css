@@ -1,0 +1,8 @@
+body { font-family: system-ui, sans-serif; margin: 0 16px 32px; color: #222; background: #fff; }
+a { color: #0a58ca; }
+table { border-collapse: collapse; margin: 8px 0 16px; }
+th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+.error { color: #b00020; }
+.muted { color: #777; }
+.table-wrap { overflow-x: auto; }

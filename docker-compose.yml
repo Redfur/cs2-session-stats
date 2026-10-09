@@ -1,0 +1,12 @@
+services:
+  cs2stats:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    # процесс пишет в ./data, поэтому запускаем его от пользователя-владельца каталога
+    user: "${UID:-1000}:${GID:-1000}"
+    # environment:
+    #   MAX_DEMO_SIZE: "1073741824"  # лимит распакованной демки в байтах (по умолчанию 1 ГБ)
+    restart: unless-stopped

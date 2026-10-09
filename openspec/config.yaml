@@ -1,0 +1,50 @@
+schema: spec-driven
+
+context: |
+  Language: ru
+  All artifacts must be written in ru.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+
+  Проект: cs2stats — анализатор демок CS2 только для дружеских 5х5 игровых сессий
+  (компания друзей собирается вечером и играет несколько матчей между собой).
+  Матчи играются как кастомные на FastCup и Cybershoke. Публичного API для скачивания
+  демок у этих платформ нет, поэтому демки загружаются вручную (файлом).
+
+  Стек:
+  - Backend: Go, один бинарь (HTTP API + фоновый воркер парсинга), парсер демок github.com/markus-wa/demoinfocs-golang.
+  - Хранилище: SQLite (modernc.org/sqlite, без CGO), исходные демки на диске в /data.
+  - Frontend: React + TypeScript (Vite), уровень прототипа — без UI-китов и вложений в дизайн.
+  - Запуск: docker compose (хостинг не выбран: локально или VPS).
+
+  Доменные термины:
+  - Player — игрок, идентифицируется SteamID64.
+  - Match — один матч (одна демка): карта, дата, счёт, scoreboard.
+  - Session — игровой вечер: группа матчей, которую пользователь создаёт явно (дата + название) и загружает в неё демки.
+    В демках CS2 нет даты матча, поэтому автоматически группировать по времени нельзя.
+  - Составы команд меняются между матчами, поэтому аналитика игроко-центричная, а не командная.
+
+  Принципы:
+  - Сначала маленький MVP, затем итеративные улучшения; каждое улучшение — отдельный OpenSpec change.
+  - Не делаем: видеохайлайты, детект читов, скрейпинг закрытых API платформ.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing

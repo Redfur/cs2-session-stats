@@ -1,0 +1,7 @@
+.git
+data
+web/node_modules
+internal/webui/dist
+openspec
+.claude
+cs2stats
