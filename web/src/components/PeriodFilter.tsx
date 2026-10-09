@@ -1,78 +1,97 @@
-import { useEffect, useState } from 'react'
-import type { SetURLSearchParams } from 'react-router'
-import { api, sessionTitle, type SessionSummary } from '../api'
-import { updateParams } from '../filters'
+import { Popover, PopoverButton, PopoverPanel } from '@headlessui/react'
+import { ChevronDown } from 'lucide-react'
+import type { SessionSummary } from '../api'
+import { formatDateShort } from '../format'
+import type { Period, PeriodMode } from '../period'
+import { buttonClass } from './ui/buttonClass'
+import { Checkbox } from './ui/Checkbox'
+import { Field, Input, Label } from './ui/Field'
+import { Segment } from './ui/Segment'
 
-// Режим периода хранится в URL: period=sessions или наличие session — выбор сессий, иначе даты.
-// Параметр period сервер игнорирует, он нужен, чтобы режим не сбрасывался, пока сессии не выбраны.
-function periodMode(params: URLSearchParams): 'dates' | 'sessions' {
-  return params.get('period') === 'sessions' || params.has('session') ? 'sessions' : 'dates'
+const MODES: { value: PeriodMode; label: string }[] = [
+  { value: 'dates', label: 'Даты' },
+  { value: 'sessions', label: 'Сессии' },
+]
+
+// Список сессий с чекбоксами; сессия без названия показывается датой.
+export function SessionChecklist({ period, sessions }: { period: Period; sessions: SessionSummary[] }) {
+  if (sessions.length === 0) return <span className="text-small text-fg-muted">Сессий нет.</span>
+  return (
+    <div className="flex flex-col gap-1.5">
+      {sessions.map((s) => (
+        <Checkbox
+          key={s.id}
+          checked={period.selected.has(String(s.id))}
+          onChange={() => period.toggleSession(String(s.id))}
+          count={s.matchCount}
+        >
+          <span className="overflow-hidden text-ellipsis whitespace-nowrap">{s.title || formatDateShort(s.date)}</span>
+          <span className="text-small text-fg-muted">{s.title ? formatDateShort(s.date) : 'без названия'}</span>
+        </Checkbox>
+      ))}
+    </div>
+  )
 }
 
-// Фильтр периода: либо диапазон дат сессий, либо выбранные сессии.
-export function PeriodFilter({ params, setParams }: { params: URLSearchParams; setParams: SetURLSearchParams }) {
-  const [sessions, setSessions] = useState<SessionSummary[]>([])
-  useEffect(() => {
-    api.listSessions().then(setSessions, () => setSessions([]))
-  }, [])
-
-  const mode = periodMode(params)
-  const selected = new Set(params.getAll('session'))
-  const update = (change: (p: URLSearchParams) => void) => updateParams(params, setParams, change)
-
-  function setMode(m: 'dates' | 'sessions') {
-    update((p) => {
-      p.delete('from')
-      p.delete('to')
-      p.delete('session')
-      p.delete('period')
-      if (m === 'sessions') p.set('period', 'sessions')
-    })
-  }
-
-  function setDate(key: 'from' | 'to', value: string) {
-    update((p) => (value ? p.set(key, value) : p.delete(key)))
-  }
-
-  function toggleSession(id: string) {
-    update((p) => {
-      const ids = p.getAll('session').filter((x) => x !== id)
-      if (!selected.has(id)) ids.push(id)
-      p.delete('session')
-      for (const x of ids) p.append('session', x)
-    })
-  }
-
+function DateFields({ period, idPrefix, className }: { period: Period; idPrefix: string; className?: string }) {
   return (
-    <fieldset>
-      <legend>Период</legend>
-      <label>
-        <input type="radio" checked={mode === 'dates'} onChange={() => setMode('dates')} /> даты
-      </label>{' '}
-      <label>
-        <input type="radio" checked={mode === 'sessions'} onChange={() => setMode('sessions')} /> сессии
-      </label>
-      {mode === 'dates' ? (
-        <p>
-          <label>
-            с <input type="date" value={params.get('from') ?? ''} onChange={(e) => setDate('from', e.target.value)} />
-          </label>{' '}
-          <label>
-            по <input type="date" value={params.get('to') ?? ''} onChange={(e) => setDate('to', e.target.value)} />
-          </label>
-        </p>
+    <>
+      <Field label="С" htmlFor={`${idPrefix}-from`} className={className}>
+        <Input id={`${idPrefix}-from`} type="date" value={period.from} onChange={(e) => period.setDate('from', e.target.value)} />
+      </Field>
+      <Field label="По" htmlFor={`${idPrefix}-to`} className={className}>
+        <Input id={`${idPrefix}-to`} type="date" value={period.to} onChange={(e) => period.setDate('to', e.target.value)} />
+      </Field>
+    </>
+  )
+}
+
+// PeriodSide — фильтр периода в боковой панели: сегмент режима, под ним даты или список сессий.
+export function PeriodSide({ period, sessions }: { period: Period; sessions: SessionSummary[] }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <Label>Период</Label>
+      <Segment label="Режим периода" value={period.mode} onChange={period.setMode} options={MODES} />
+      {period.mode === 'dates' ? (
+        <>
+          <div className="grid grid-cols-2 gap-2.5">
+            <DateFields period={period} idPrefix="pf" />
+          </div>
+          <span className="text-small text-fg-muted">Пусто — за всё время</span>
+        </>
       ) : (
-        <div className="checklist">
-          {sessions.length === 0 && <span className="muted">Сессий нет.</span>}
-          {sessions.map((s) => (
-            <label key={s.id}>
-              <input type="checkbox" checked={selected.has(String(s.id))} onChange={() => toggleSession(String(s.id))} />{' '}
-              {s.date}
-              {s.title ? ` — ${sessionTitle(s)}` : ''} <span className="muted">({s.matchCount})</span>
-            </label>
-          ))}
-        </div>
+        <SessionChecklist period={period} sessions={sessions} />
       )}
-    </fieldset>
+    </div>
+  )
+}
+
+// PeriodBar — компактный фильтр периода над таблицами; сессии выбираются в поповере.
+export function PeriodBar({ period, sessions }: { period: Period; sessions: SessionSummary[] }) {
+  return (
+    <div className="flex flex-wrap items-end gap-3" role="group" aria-label="Период">
+      <div className="flex flex-col gap-1.5">
+        <Label>Период</Label>
+        <Segment label="Режим периода" value={period.mode} onChange={period.setMode} options={MODES} />
+      </div>
+      {period.mode === 'dates' ? (
+        <div className="grid grid-cols-2 gap-3 sm:flex">
+          <DateFields period={period} idPrefix="pp" className="sm:w-[150px]" />
+        </div>
+      ) : (
+        <Popover className="relative">
+          <PopoverButton className={buttonClass({ variant: 'secondary' })}>
+            Выбрать сессии · {period.selected.size}
+            <ChevronDown className="size-4" aria-hidden />
+          </PopoverButton>
+          <PopoverPanel
+            anchor={{ to: 'bottom end', gap: 6 }}
+            className="z-40 max-h-[360px] w-[300px] max-w-[calc(100vw-32px)] overflow-y-auto rounded-lg border border-border-strong bg-surface p-4 shadow-overlay"
+          >
+            <SessionChecklist period={period} sessions={sessions} />
+          </PopoverPanel>
+        </Popover>
+      )}
+    </div>
   )
 }

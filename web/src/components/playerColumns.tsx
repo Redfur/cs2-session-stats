@@ -61,10 +61,10 @@ export const PLAYER_TOTAL_COLUMNS: Column<PlayerRow>[] = [
   count('w', 'П', 'Победы', (p) => p.wins ?? 0, 40),
   ...statColumns,
 ]
-export const PLAYER_TOTAL_MIN_WIDTH = 992
+export const PLAYER_TOTAL_MIN_WIDTH = 960
 
 // Таблица команды на странице матча.
 export const PLAYER_MATCH_COLUMNS: Column<PlayerRow>[] = [nameColumn, ...statColumns]
-export const PLAYER_MATCH_MIN_WIDTH = 912
+export const PLAYER_MATCH_MIN_WIDTH = 880
 
 export const RATING_DESC: SortState = { key: 'rating', dir: 'desc' }

@@ -1,5 +1,7 @@
 // Типы и вызовы JSON API бэкенда (internal/api).
 
+import { formatDateLong } from './format'
+
 export type MatchStatus = 'pending' | 'parsing' | 'done' | 'failed'
 
 export interface Session {
@@ -196,20 +198,6 @@ export function isProcessing(m: Match): boolean {
   return m.status === 'pending' || m.status === 'parsing'
 }
 
-// Подпись статуса с учётом пересчёта: у матча с результатом pending/parsing/failed — это пересчёт.
-export function matchStatusLabel(m: Match): string {
-  switch (m.status) {
-    case 'pending':
-      return m.hasResult ? 'пересчёт в очереди' : 'в очереди'
-    case 'parsing':
-      return m.hasResult ? 'пересчитывается' : 'обрабатывается'
-    case 'done':
-      return 'готово'
-    case 'failed':
-      return m.hasResult ? 'ошибка пересчёта' : 'ошибка'
-  }
-}
-
 export function todayISO(): string {
   const d = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -217,5 +205,5 @@ export function todayISO(): string {
 }
 
 export function sessionTitle(s: Session): string {
-  return s.title || s.date
+  return s.title || formatDateLong(s.date)
 }

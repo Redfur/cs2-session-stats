@@ -9,7 +9,8 @@
 - **Любая доработка идёт через OpenSpec:** `/opsx:propose` → ревью артефактов пользователем → `/opsx:apply` → `/opsx:archive`.
   Не начинать реализацию без явной команды apply. Архивировать с синхронизацией спек в `openspec/specs/`.
 - **Маленькими шагами.** Сначала минимальный change, улучшения — отдельными changes. Если в задаче всплывает работа сверх спеки, остановиться и спросить, а не расширять объём молча.
-- **Фронтенд — прототип.** Без UI-китов и вложений в дизайн, пока не попросят.
+- **Фронтенд — по дизайн-системе.** Новые экраны собирать из `web/src/components/ui/` и токенов `@theme`, без разовых цветов и размеров.
+  Источник дизайна — артефакт Claude Design https://claude.ai/artifact/RyiK38Ld5u2q9uQMxYhe6h (снимок макетов — `data/design-input/design/`, вне git).
 - Если при реализации решение отличается от `design.md`/`tasks.md`, сразу поправить артефакты, чтобы они соответствовали коду.
 - Задачу в `tasks.md` отмечать `[x]` только после выполнения её проверки. Если проверку сделать нельзя (например, нет демки нужной платформы), задача остаётся открытой, и об этом надо сказать.
 - Артефакты OpenSpec, комментарии в коде, тексты UI, ошибки API и сообщения коммитов пишутся **на русском**. Ключевые слова OpenSpec (SHALL/MUST, заголовки) остаются на английском.
@@ -53,7 +54,11 @@ internal/worker    очередь матчей; ProcessingVersion; пересч�
 internal/store     SQLite: sessions, matches, match_players; миграции migrations/NNN_*.sql через PRAGMA user_version
 internal/api       JSON API на net/http ServeMux; PlayerView для вывода
 internal/webui     раздача SPA: embed при -tags embedweb, иначе с диска (STATIC_DIR)
-web/               Vite + React + TS + react-router; страницы /, /sessions/:id, /matches/:id
+web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI + lucide-react; страницы /, /sessions/:id, /matches/:id, /players, /players/:id
+  src/index.css      токены дизайна (@theme), шрифты Manrope и JetBrains Mono самохостом (@fontsource-variable)
+  src/components/ui  компоненты дизайн-системы: каркас, кнопки, поля, бейджи, StatTable, диалоги, загрузка
+  src/metrics.ts     шкала «плохо / средне / хорошо» для rating, K/D, ADR, KAST
+  src/sort.ts        сортировка таблиц в адресе (useSort); src/upload.ts — очередь загрузки демок
 ```
 
 Поток данных: `POST /api/sessions/{id}/demos` → `ingest` сохраняет `data/demos/<sha256>.dem` и создаёт матч `pending` → `worker.Wake()` → `parser.Parse` → `stats.Compute` → `store.SaveMatchResult`.
@@ -67,6 +72,8 @@ web/               Vite + React + TS + react-router; страницы /, /sessio
 - **Очередь** — таблица `matches`. `ClaimNextPending` идёт в порядке `has_result, id`, так что новые загрузки обрабатываются раньше пересчётов. При остановке сервиса матч остаётся `parsing`, при старте `ResetParsing` возвращает его в очередь, а не помечает `failed`.
 - **Команды A/B:** A — команда, начавшая матч за CT. После смены сторон её сторона определяется по большинству её игроков. Счёт считается по победителям раундов. На `TeamState` не опираемся.
 - **SteamID64 в JSON — строка**: в JavaScript number он теряет точность.
+- **Фильтры и сортировка — в адресе страницы.** Сортировка: `sort` для главной таблицы, `ss`/`sm`/`sx` для разбивок профиля; значение по умолчанию в адрес не пишется. Шкала метрик сравнивает округлённое отображаемое значение.
+- **Демки загружаются по одной** (`api.uploadDemo` с `AbortSignal`), очередь на клиенте строго последовательна — так порядок матчей совпадает с порядком файлов.
 - **Схема БД меняется только новой миграцией** `internal/store/migrations/NNN_*.sql` с заполнением существующих строк. Старые миграции не править.
 - **Хранилище демок** — интерфейс `ingest.Storage` (`Save`/`Open`/`Delete`), задел под S3/MinIO. Пока идёт разработка, демки хранятся без срока. Политику хранения для публичного деплоя (внешнее хранилище или удаление после парсинга) решить отдельным change.
 - **Авторизации нет.** Сервис не открывать наружу без reverse proxy.
@@ -100,4 +107,5 @@ web/               Vite + React + TS + react-router; страницы /, /sessio
 - zsh не разбивает `$var` на слова: `cmd $args` передаёт один аргумент. Аргументы писать явно или использовать массивы.
 - `pkill -f <шаблон>` может убить собственный shell, если шаблон встречается в его командной строке.
 - Сборка Docker иногда виснет на `load metadata for docker.io/library/golang:...`. Помогает отдельный `docker pull golang:1.27-alpine`.
+- Обёртке таблицы с `overflow-x-auto` нужен `relative`: иначе `sr-only` (absolute) внутри неё растягивает всю страницу по горизонтали.
 - Контейнер работает от UID/GID 1000 (`user:` в compose), чтобы писать в смонтированный `./data`.

@@ -30,7 +30,7 @@ export function Alert({ tone, title, children, action, icon, className }: AlertP
       <span className={cx('mt-0.5 flex-none [&>svg]:size-4', tone === 'error' ? 'text-status-error' : 'text-status-progress')}>
         {icon ?? (tone === 'error' ? <CircleAlert aria-hidden /> : <RefreshCw className="animate-spin" aria-hidden />)}
       </span>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-[220px]">
         {title && <b className="font-bold">{title}</b>} {children}
       </div>
       {action && <div className="ml-auto flex-none">{action}</div>}

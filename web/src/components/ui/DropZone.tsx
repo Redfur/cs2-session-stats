@@ -119,7 +119,7 @@ export function DropZone({ variant, onFiles, nextNumber, rejected }: DropZonePro
           ) : (
             <>
               <p className="m-0 text-sub">Загрузите демки вечера</p>
-              <p className="m-0 max-w-[440px] text-[13px] leading-4 text-fg-muted">
+              <p className="m-0 max-w-[440px] text-[13px] leading-5 text-fg-muted">
                 Перетащите файлы сюда или {pick}. Можно сразу несколько — порядок файлов станет порядком матчей.
               </p>
               <div className="mt-2 flex flex-wrap justify-center gap-1.5">

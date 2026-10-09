@@ -48,7 +48,7 @@ const STICKY = 'sticky left-0 z-[1] border-r border-border bg-inherit'
 // прокрутка по горизонтали внутри своего блока.
 export function StatTable<T>({ columns, rows, rowKey, sort, onSort, highlight, labelledBy, label, minWidth }: StatTableProps<T>) {
   return (
-    <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
+    <div className="relative overflow-x-auto [-webkit-overflow-scrolling:touch]">
       <table
         className="w-full table-fixed border-collapse text-table tabular-nums"
         style={{ minWidth }}

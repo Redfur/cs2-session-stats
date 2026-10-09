@@ -13,7 +13,8 @@ context: |
   Стек:
   - Backend: Go, один бинарь (HTTP API + фоновый воркер парсинга), парсер демок github.com/markus-wa/demoinfocs-golang.
   - Хранилище: SQLite (modernc.org/sqlite, без CGO), исходные демки на диске в /data.
-  - Frontend: React + TypeScript (Vite), уровень прототипа — без UI-китов и вложений в дизайн.
+  - Frontend: React + TypeScript (Vite), Tailwind v4 с токенами дизайна, Headless UI, lucide-react; тёмная тема.
+    Экраны собираются из компонентов web/src/components/ui по макетам Claude Design.
   - Запуск: docker compose (хостинг не выбран: локально или VPS).
 
   Доменные термины:
