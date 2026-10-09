@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 )
 
 type Session struct {
@@ -15,7 +16,9 @@ type Session struct {
 
 type SessionSummary struct {
 	Session
-	MatchCount int `json:"matchCount"`
+	MatchCount  int      `json:"matchCount"`
+	FailedCount int      `json:"failedCount"` // матчи в статусе failed
+	Maps        []string `json:"maps"`        // карты матчей с результатом по порядку, без повторов
 }
 
 // CreateSession создаёт сессию. Дату валидирует вызывающий код.
@@ -31,26 +34,56 @@ func (s *Store) CreateSession(ctx context.Context, date, title string) (Session,
 	return sess, err
 }
 
-// ListSessions возвращает сессии от новых к старым.
+// ListSessions возвращает сессии от новых к старым со сводкой по матчам.
 func (s *Store) ListSessions(ctx context.Context) ([]SessionSummary, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT s.id, s.date, s.title, s.created_at, count(m.id)
+		SELECT s.id, s.date, s.title, s.created_at, count(m.id), coalesce(sum(m.status = ?), 0)
 		FROM sessions s LEFT JOIN matches m ON m.session_id = s.id
 		GROUP BY s.id
-		ORDER BY s.date DESC, s.id DESC`)
+		ORDER BY s.date DESC, s.id DESC`, StatusFailed)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	list := []SessionSummary{}
+	byID := map[int64]*SessionSummary{}
 	for rows.Next() {
-		var x SessionSummary
-		if err := rows.Scan(&x.ID, &x.Date, &x.Title, &x.CreatedAt, &x.MatchCount); err != nil {
+		x := SessionSummary{Maps: []string{}}
+		if err := rows.Scan(&x.ID, &x.Date, &x.Title, &x.CreatedAt, &x.MatchCount, &x.FailedCount); err != nil {
 			return nil, err
 		}
 		list = append(list, x)
 	}
-	return list, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range list {
+		byID[list[i].ID] = &list[i]
+	}
+	return list, s.fillSessionMaps(ctx, byID)
+}
+
+// fillSessionMaps добавляет сессиям карты матчей с результатом в порядке номеров, без повторов.
+func (s *Store) fillSessionMaps(ctx context.Context, byID map[int64]*SessionSummary) error {
+	rows, err := s.db.QueryContext(ctx,
+		"SELECT session_id, map FROM matches WHERE has_result = 1 ORDER BY session_id, ordinal")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var m string
+		if err := rows.Scan(&id, &m); err != nil {
+			return err
+		}
+		x := byID[id]
+		if x == nil || m == "" || slices.Contains(x.Maps, m) {
+			continue
+		}
+		x.Maps = append(x.Maps, m)
+	}
+	return rows.Err()
 }
 
 func (s *Store) GetSession(ctx context.Context, id int64) (Session, error) {

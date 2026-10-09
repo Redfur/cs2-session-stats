@@ -11,6 +11,12 @@ export interface Session {
 
 export interface SessionSummary extends Session {
   matchCount: number
+  // матчи в статусе failed
+  failedCount: number
+  // карты матчей с результатом в порядке номеров, без повторов
+  maps: string[]
+  // игрок с наибольшим rating в итогах сессии; нет, если результатов нет
+  best?: { steamId: string; name: string; rating: number }
 }
 
 export interface Match {

@@ -53,13 +53,54 @@ func (s *Server) Handler(static http.Handler) http.Handler {
 	return mux
 }
 
+// bestPlayer — лучший игрок сессии в списке сессий.
+type bestPlayer struct {
+	SteamID string  `json:"steamId"`
+	Name    string  `json:"name"`
+	Rating  float64 `json:"rating"`
+}
+
+type sessionSummaryView struct {
+	store.SessionSummary
+	Best *bestPlayer `json:"best,omitempty"`
+}
+
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	list, err := s.Store.ListSessions(r.Context())
 	if err != nil {
 		s.internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	views := make([]sessionSummaryView, 0, len(list))
+	for _, x := range list {
+		v := sessionSummaryView{SessionSummary: x}
+		if x.MatchCount > 0 {
+			agg, err := s.Store.SessionPlayers(r.Context(), x.ID)
+			if err != nil {
+				s.internalError(w, err)
+				return
+			}
+			v.Best = pickBest(totalsView(agg))
+		}
+		views = append(views, v)
+	}
+	writeJSON(w, http.StatusOK, views)
+}
+
+// pickBest выбирает игрока с наибольшим rating, при равенстве — с большим числом раундов, затем по нику.
+func pickBest(players []PlayerView) *bestPlayer {
+	var best *PlayerView
+	for i := range players {
+		p := &players[i]
+		if best == nil || p.Rating > best.Rating ||
+			p.Rating == best.Rating && (p.Rounds > best.Rounds || p.Rounds == best.Rounds && p.Name < best.Name) {
+			best = p
+		}
+	}
+	if best == nil {
+		return nil
+	}
+	return &bestPlayer{SteamID: best.SteamID, Name: best.Name, Rating: best.Rating}
 }
 
 type createSessionRequest struct {

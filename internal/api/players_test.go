@@ -179,3 +179,50 @@ func TestGetPlayer(t *testing.T) {
 		t.Errorf("неверная дата в профиле: %d", code)
 	}
 }
+
+func TestListSessionsSummary(t *testing.T) {
+	e := newTestEnv(t)
+	_, s2 := seedPlayers(t, e)
+	empty, _ := e.store.CreateSession(context.Background(), "2026-10-09", "")
+
+	// SteamID проверяется по сырому JSON: в number он потерял бы точность
+	var raw []map[string]any
+	if code := e.do(t, "GET", "/api/sessions", "", nil, &raw); code != 200 || len(raw) != 3 {
+		t.Fatalf("список: %d %v", code, raw)
+	}
+	if _, ok := raw[0]["best"]; ok || raw[0]["id"] != float64(empty.ID) {
+		t.Errorf("у сессии без результатов не должно быть best: %v", raw[0])
+	}
+	best, ok := raw[1]["best"].(map[string]any)
+	if !ok {
+		t.Fatalf("нет best: %v", raw[1])
+	}
+	if _, isStr := best["steamId"].(string); !isStr {
+		t.Errorf("steamId не строка: %#v", best["steamId"])
+	}
+
+	var sess sessionResponse
+	e.do(t, "GET", fmt.Sprintf("/api/sessions/%d", s2.ID), "", nil, &sess)
+	first := sess.Players[0]
+	if best["steamId"] != first.SteamID || best["name"] != first.Name || best["rating"] != first.Rating {
+		t.Errorf("best %v не совпадает с первой строкой итогов %+v", best, first)
+	}
+	if maps := raw[1]["maps"].([]any); len(maps) != 1 || maps[0] != "de_mirage" {
+		t.Errorf("карты: %v", maps)
+	}
+}
+
+func TestPickBestTies(t *testing.T) {
+	got := pickBest([]PlayerView{
+		{SteamID: "1", Name: "b", Rating: 1.2, Counters: stats.Counters{Rounds: 20}},
+		{SteamID: "2", Name: "c", Rating: 1.2, Counters: stats.Counters{Rounds: 30}},
+		{SteamID: "3", Name: "a", Rating: 1.2, Counters: stats.Counters{Rounds: 30}},
+		{SteamID: "4", Name: "z", Rating: 1.1, Counters: stats.Counters{Rounds: 40}},
+	})
+	if got == nil || got.SteamID != "3" {
+		t.Fatalf("ожидался игрок 3, получено %+v", got)
+	}
+	if pickBest(nil) != nil {
+		t.Fatal("для пустого списка ожидался nil")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"cs2stats/internal/stats"
@@ -180,5 +181,49 @@ func TestClaimPrefersNewUploads(t *testing.T) {
 	}
 	if next, _, _ := s.ClaimNextPending(ctx); !next.HasResult {
 		t.Fatalf("затем должен идти пересчёт: %+v", next)
+	}
+}
+
+func TestSessionsListSummary(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	full, _ := s.CreateSession(ctx, "2026-10-08", "")
+	mixed, _ := s.CreateSession(ctx, "2026-10-07", "")
+	empty, _ := s.CreateSession(ctx, "2026-10-06", "")
+
+	done := func(sessionID int64, sha, mapName string) {
+		t.Helper()
+		m, err := s.AddMatch(ctx, sessionID, sha, "m.dem")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SaveMatchResult(ctx, m.ID, MatchResult{Map: mapName, Rounds: 1}, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	done(full.ID, "f1", "de_dust2")
+	done(full.ID, "f2", "de_mirage")
+	done(full.ID, "f3", "de_dust2")
+	done(mixed.ID, "x1", "de_nuke")
+	failed, _ := s.AddMatch(ctx, mixed.ID, "x2", "m.dem")
+	s.FailMatch(ctx, failed.ID, "ошибка", 1)
+	s.AddMatch(ctx, mixed.ID, "x3", "m.dem") // ещё в очереди
+
+	list, err := s.ListSessions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[int64]SessionSummary{}
+	for _, x := range list {
+		got[x.ID] = x
+	}
+	if x := got[full.ID]; !reflect.DeepEqual(x.Maps, []string{"de_dust2", "de_mirage"}) || x.FailedCount != 0 || x.MatchCount != 3 {
+		t.Fatalf("сессия с повтором карты: %+v", x)
+	}
+	if x := got[mixed.ID]; !reflect.DeepEqual(x.Maps, []string{"de_nuke"}) || x.FailedCount != 1 || x.MatchCount != 3 {
+		t.Fatalf("сессия с ошибкой: %+v", x)
+	}
+	if x := got[empty.ID]; x.Maps == nil || len(x.Maps) != 0 || x.FailedCount != 0 {
+		t.Fatalf("пустая сессия: %+v", x)
 	}
 }

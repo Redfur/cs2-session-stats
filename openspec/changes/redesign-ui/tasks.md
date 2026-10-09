@@ -2,9 +2,9 @@
 
 ## 1. Бэкенд: сводка сессий в списке
 
-- [ ] 1.1 Расширить `store.ListSessions`/`SessionSummary`: `failedCount` (в основном запросе) и `maps` (отдельный запрос по `has_result = 1` в порядке `ordinal`, без повторов); проверить тестом в `internal/store` на сессиях с повтором карты, матчем `failed` без результата и пустой сессией
-- [ ] 1.2 В `api.listSessions` добавить `best { steamId, name, rating }` через `SessionPlayers` + `totalsView` (максимум rating, при равенстве — больше раундов, затем ник; у сессии без результатов поля нет); проверить тестом в `internal/api`, что `best` совпадает с первой строкой итогов `GET /api/sessions/{id}`, а SteamID — строка
-- [ ] 1.3 Обновить типы `SessionSummary` в `web/src/api.ts`; проверить `make test`
+- [x] 1.1 Расширить `store.ListSessions`/`SessionSummary`: `failedCount` (в основном запросе) и `maps` (отдельный запрос по `has_result = 1` в порядке `ordinal`, без повторов); проверить тестом в `internal/store` на сессиях с повтором карты, матчем `failed` без результата и пустой сессией
+- [x] 1.2 В `api.listSessions` добавить `best { steamId, name, rating }` через `SessionPlayers` + `totalsView` (максимум rating, при равенстве — больше раундов, затем ник; у сессии без результатов поля нет); проверить тестом в `internal/api`, что `best` совпадает с первой строкой итогов `GET /api/sessions/{id}`, а SteamID — строка
+- [x] 1.3 Обновить типы `SessionSummary` в `web/src/api.ts`; проверить `make test`
 
 ## 2. Фронтенд: основа
 
