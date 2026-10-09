@@ -39,14 +39,15 @@ Store не проверяет взаимоисключение дат и сес�
 *Альтернатива:* отдельный запрос под каждую страницу. Отвергнута: правило `has_result` и логика ника продублировались бы в четырёх местах.
 
 ### 2. Агрегирующие запросы
-- `PlayerTotals(ctx, f MatchFilter, minMatches int) ([]PlayerTotal, error)`: `GROUP BY mp.steam_id HAVING count(*) >= ?`. `PlayerTotal` — переименованный `SessionPlayer` (`SteamID, Name, Matches, Wins, stats.Counters`).
+- `PlayerTotals(ctx, f MatchFilter, minMatches int) ([]PlayerTotal, error)`: `GROUP BY mp.steam_id HAVING count(*) >= ?`. `PlayerTotal` — переименованный `SessionPlayer` (`SteamID, Name, Aggregate`).
 - `SessionPlayers(ctx, id)` = `PlayerTotals(ctx, MatchFilter{SessionIDs: []int64{id}}, 1)`. Публичная сигнатура и поведение сессии не меняются, существующие тесты должны пройти без правок.
 - Профиль:
   - `PlayerSessions(ctx, steamID, f)` (`GROUP BY m.session_id`, вместе с датой и названием сессии);
   - `PlayerMaps(ctx, steamID, f)` (`GROUP BY m.map`);
   - `PlayerMatches(ctx, steamID, f)` (строки `match_players` с картой, счётом, `ordinal` и сессией).
 - Список сумм из 14 счётчиков и соответствующий `Scan` выносятся в общие константу и функцию, чтобы не дублировать их в четырёх запросах.
-- Существование игрока проверяется отдельным `PlayerExists(ctx, steamID)`: есть ли хотя бы одна строка в матче с `has_result = 1`. Так API отличает 404 от пустого периода.
+- Существование игрока и ник для заголовка профиля API получает из `PlayerTotals(MatchFilter{PlayerIDs: {id}}, 1)` без периода: пустой ответ означает 404. Так 404 отличается от пустого периода без отдельного запроса.
+- `SessionPlayer` переименован в `PlayerTotal`; общие для разбивок поля (`Matches`, `Wins`, `stats.Counters`) вынесены во встраиваемую структуру `Aggregate`.
 
 ### 3. Ник из последнего матча выборки
 Ник берётся коррелированным подзапросом с тем же WHERE, что и основной запрос, и сортировкой

@@ -37,6 +37,8 @@ func (s *Server) Handler(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/matches/{id}", s.getMatch)
 	mux.HandleFunc("POST /api/matches/{id}/reparse", s.reparseMatch)
 	mux.HandleFunc("POST /api/sessions/{id}/reparse", s.reparseSession)
+	mux.HandleFunc("GET /api/players", s.listPlayers)
+	mux.HandleFunc("GET /api/players/{steamId}", s.getPlayer)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "неизвестный метод API")
 	})
@@ -111,14 +113,7 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, err)
 		return
 	}
-	players := make([]PlayerView, 0, len(agg))
-	for _, p := range agg {
-		v := newPlayerView(p.SteamID, p.Name, p.Counters)
-		v.Matches, v.Wins = p.Matches, p.Wins
-		players = append(players, v)
-	}
-	sort.SliceStable(players, func(i, j int) bool { return players[i].Rating > players[j].Rating })
-	writeJSON(w, http.StatusOK, sessionResponse{Session: sess, Matches: matches, Players: players})
+	writeJSON(w, http.StatusOK, sessionResponse{Session: sess, Matches: matches, Players: totalsView(agg)})
 }
 
 func (s *Server) uploadDemos(w http.ResponseWriter, r *http.Request) {
