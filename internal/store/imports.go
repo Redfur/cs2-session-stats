@@ -134,7 +134,7 @@ func (s *Store) FinishImport(ctx context.Context, id int64, errMsg string, resul
 	if errMsg != "" {
 		status = ImportFailed
 	}
-	if results == nil {
+	if len(results) == 0 || string(results) == "null" {
 		results = json.RawMessage("[]")
 	}
 	return s.execOne(ctx,

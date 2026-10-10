@@ -518,3 +518,16 @@ func TestAddConcurrentSameLink(t *testing.T) {
 		t.Fatalf("загрузок %d", len(list))
 	}
 }
+
+// Демка пропала между проверкой и скачиванием: загрузка падает с текстом платформы и пустым итогом [].
+func TestResolveErrorInBackground(t *testing.T) {
+	e := newEnv(t, 1<<20)
+	e.fake.set("1", Match{Number: 1, StartedAt: at(20, 0)})
+	id := e.add(t, "1")
+	e.fake.errs["1"] = userErr("FastCup удалил демку: она хранится около 30 дней.")
+	e.im.drain(context.Background())
+	x, _ := e.importOf(t, id)
+	if x.Status != store.ImportFailed || !strings.HasPrefix(x.Error, "FastCup удалил демку") || string(x.Results) != "[]" {
+		t.Fatalf("%+v results=%s", x, x.Results)
+	}
+}

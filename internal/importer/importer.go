@@ -338,6 +338,9 @@ func (im *Importer) process(parent context.Context, x store.Import) {
 		log.Info("скачивание отменено")
 		return // загрузку или сессию удалили
 	}
+	if results == nil {
+		results = []ingest.FileResult{} // в JSON — [], а не null: интерфейс перебирает итог по картам
+	}
 	data, _ := json.Marshal(results)
 	if err := im.Store.FinishImport(context.WithoutCancel(ctx), x.ID, errMsg, data); err != nil && !errors.Is(err, store.ErrNotFound) {
 		log.Error("сохранение итога загрузки", "err", err)

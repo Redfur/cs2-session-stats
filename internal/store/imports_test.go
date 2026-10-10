@@ -67,6 +67,10 @@ func TestImportQueue(t *testing.T) {
 	if _, err := s.RetryImport(ctx, 999); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("retry неизвестной: %v", err)
 	}
+	s.FinishImport(ctx, b.ID, "ещё раз", json.RawMessage("null"))
+	if x, _ := s.GetImport(ctx, b.ID); string(x.Results) != "[]" {
+		t.Fatalf("null в итоге должен стать []: %s", x.Results)
+	}
 	if err := s.FinishImport(ctx, 999, "", nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("finish неизвестной: %v", err)
 	}
