@@ -1,7 +1,9 @@
-import { Calendar, Pencil, RefreshCw, Trash } from 'lucide-react'
+import { Calendar, Info, Pencil, RefreshCw, Trash } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
-import { api, isImportActive, isProcessing, sessionTitle, type Match, type SessionDetails } from '../api'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
+import { api, isImportActive, isProcessing, sessionTitle, type Match, type PlayerRow, type SessionDetails, type SessionExt } from '../api'
+import { detailColumns, joinDetails } from '../components/detailColumns'
+import { useExtLoad } from '../ext'
 import { ImportList } from '../components/ImportList'
 import { InlineEdit } from '../components/InlineEdit'
 import { MatchLinkForm } from '../components/MatchLinkForm'
@@ -10,16 +12,18 @@ import { SessionDuelsCard } from '../components/Duels'
 import { PageError, PageLoading } from '../components/PageState'
 import { PLAYER_TOTAL_COLUMNS, PLAYER_TOTAL_MIN_WIDTH, RATING_DESC } from '../components/playerColumns'
 import { Alert } from '../components/ui/Alert'
+import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card, CardBody, CardFooter, CardHeader } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/Dialog'
 import { DropZone } from '../components/ui/DropZone'
 import { Page } from '../components/ui/Layout'
 import { MetaItem, PageHeader } from '../components/ui/PageHeader'
+import { Segment } from '../components/ui/Segment'
 import { SortHint, StatTable } from '../components/ui/StatTable'
 import { UploadList } from '../components/ui/UploadList'
 import { formatDateLong, plural } from '../format'
-import { sortRows, useSort } from '../sort'
+import { sortRows, useSort, type SortState } from '../sort'
 import { useUploadQueue } from '../upload'
 
 const POLL_MS = 3000
@@ -29,6 +33,24 @@ const playersText = (n: number) => plural(n, ['игрок', 'игрока', 'и�
 
 // пересчитываются матчи с прежним результатом в статусе pending/parsing
 const reparsing = (m: Match) => m.hasResult && isProcessing(m)
+
+const DETAIL_COLUMNS = detailColumns('session', {
+  old: 'Матчи игрока обработаны старой версией — пересчитайте их',
+  noDamage: 'В демках нет событий урона — не посчитано',
+  noFlash: 'В демках нет событий ослепления — не посчитано',
+})
+
+type TotalsView = 'basic' | 'detail'
+
+// «матч #5 обработан» / «матчи #4 и #5 обработаны»
+const oldMatches = (list: { ordinal: number }[]) =>
+  list.length === 1 ? `матч ${ordinalList(list)} обработан` : `матчи ${ordinalList(list)} обработаны`
+
+const ordinalList = (list: { ordinal: number }[]) =>
+  list
+    .map((m) => `#${m.ordinal}`)
+    .join(', ')
+    .replace(/, ([^,]*)$/, ' и $1')
 
 type Confirm = { kind: 'session' } | { kind: 'reparse' } | { kind: 'match'; match: Match; number: number }
 
@@ -75,6 +97,22 @@ export function SessionPage() {
   }, [inProgress, load])
 
   const { sort, toggle } = useSort('sort', PLAYER_TOTAL_COLUMNS, RATING_DESC)
+  const detailSort = useSort('sort', DETAIL_COLUMNS, RATING_DESC)
+  const [params, setParams] = useSearchParams()
+  const totalsView: TotalsView = params.get('totals') === 'detail' ? 'detail' : 'basic'
+  const setTotalsView = (v: TotalsView) =>
+    setParams(
+      (prev) => {
+        const p = new URLSearchParams(prev)
+        if (v === 'detail') p.set('totals', 'detail')
+        else p.delete('totals')
+        p.delete('sort') // у видов разные колонки
+        return p
+      },
+      { replace: true },
+    )
+  const extVersion = data?.matches.map((m) => `${m.id}:${m.status}:${m.processedVersion}`).join(',') ?? ''
+  const ext = useExtLoad<SessionExt>(() => api.getSessionExt(id), `${id}|${extVersion}`)
 
   if (error && !data)
     return <PageError title="Не удалось открыть сессию" error={error} onRetry={load} back={{ to: '/', label: 'К списку сессий' }} />
@@ -262,21 +300,62 @@ export function SessionPage() {
             titleId="totals-h"
             note={totalsNote}
             aside={
-              <span className="hidden md:inline">
-                <SortHint columns={PLAYER_TOTAL_COLUMNS} sort={sort} prefix="" />
-                <span className="text-small text-fg-muted"> · нажмите на колонку, чтобы сортировать</span>
-              </span>
+              <div className="flex flex-wrap items-center gap-3">
+                {totalsView === 'detail' && ext.data?.status === 'partial' && (
+                  <span title={`Матчи ${ordinalList(ext.data.uncoveredMatches)} обработаны до обновления`}>
+                    <Badge tone="neutral" icon={<Info aria-hidden />}>
+                      по {plural(ext.data.coveredMatches, ['матчу', 'матчам', 'матчам'])} из {ext.data.eligibleMatches}
+                    </Badge>
+                  </span>
+                )}
+                <span className="hidden md:inline">
+                  {totalsView === 'detail' ? (
+                    <SortHint columns={DETAIL_COLUMNS} sort={detailSort.sort} prefix="" />
+                  ) : (
+                    <SortHint columns={PLAYER_TOTAL_COLUMNS} sort={sort} prefix="" />
+                  )}
+                </span>
+                <Segment
+                  label="Вид итогов"
+                  value={totalsView}
+                  onChange={setTotalsView}
+                  options={[
+                    { value: 'basic', label: 'Основное' },
+                    { value: 'detail', label: 'Подробно' },
+                  ]}
+                />
+              </div>
             }
           />
-          <StatTable
-            columns={PLAYER_TOTAL_COLUMNS}
-            rows={sortedPlayers}
-            rowKey={(p) => p.steamId}
-            sort={sort}
-            onSort={toggle}
-            labelledBy="totals-h"
-            minWidth={PLAYER_TOTAL_MIN_WIDTH}
-          />
+          {totalsView === 'detail' ? (
+            <SessionDetailTotals
+              ext={ext.data}
+              error={ext.error}
+              onRetry={ext.reload}
+              players={players}
+              sort={detailSort}
+              reparsing={isReparsing}
+              onReparse={async (ids) => {
+                setActionError(null)
+                try {
+                  for (const matchId of ids) await api.reparseMatch(matchId)
+                } catch (err) {
+                  setActionError({ title: 'Не удалось поставить пересчёт.', text: (err as Error).message })
+                }
+                load()
+              }}
+            />
+          ) : (
+            <StatTable
+              columns={PLAYER_TOTAL_COLUMNS}
+              rows={sortedPlayers}
+              rowKey={(p) => p.steamId}
+              sort={sort}
+              onSort={toggle}
+              labelledBy="totals-h"
+              minWidth={PLAYER_TOTAL_MIN_WIDTH}
+            />
+          )}
         </Card>
       )}
 
@@ -422,5 +501,72 @@ export function SessionPage() {
         }}
       />
     </Page>
+  )
+}
+
+interface SessionDetailTotalsProps {
+  ext: SessionExt | null
+  error: string
+  onRetry: () => void
+  players: PlayerRow[]
+  sort: { sort: SortState; toggle: (key: string) => void }
+  reparsing: boolean
+  onReparse: (ids: number[]) => Promise<void>
+}
+
+// SessionDetailTotals — итоги сессии «Подробно»: размены, клатчи, гранаты, выживание.
+function SessionDetailTotals({ ext, error, onRetry, players, sort, reparsing, onReparse }: SessionDetailTotalsProps) {
+  const [busy, setBusy] = useState(false)
+  if (error && !ext)
+    return (
+      <CardBody>
+        <Alert tone="error" title="Не удалось загрузить подробные итоги." action={<Button size="sm" onClick={onRetry}>Повторить</Button>}>
+          Сервер не ответил. Основные итоги доступны в режиме «Основное».
+        </Alert>
+      </CardBody>
+    )
+  if (!ext)
+    return (
+      <CardBody>
+        <p className="m-0 text-[13px] text-fg-muted" role="status">
+          Загружаем подробные итоги…
+        </p>
+      </CardBody>
+    )
+  const uncovered = ext.uncoveredMatches
+  const covered = ext.coveredMatches
+  const reparse = async () => {
+    setBusy(true)
+    await onReparse(uncovered.map((m) => m.id)).finally(() => setBusy(false))
+  }
+  const rows = sortRows(joinDetails(players, ext.players), DETAIL_COLUMNS, sort.sort)
+  return (
+    <>
+      {uncovered.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 text-small text-fg-muted md:px-5">
+          <span>
+            {covered > 0
+              ? `Подробные колонки — по ${plural(covered, ['матчу', 'матчам', 'матчам'])} из ${ext.eligibleMatches}: ${oldMatches(uncovered)} до обновления.`
+              : `${oldMatches(uncovered)} до появления подробной статистики.`}
+          </span>
+          <Button size="sm" leading={<RefreshCw aria-hidden />} loading={busy || reparsing} onClick={reparse}>
+            {reparsing ? 'Пересчитываем…' : 'Пересчитать их'}
+          </Button>
+        </div>
+      )}
+      <StatTable
+        columns={DETAIL_COLUMNS}
+        rows={rows}
+        rowKey={(p) => p.steamId}
+        sort={sort.sort}
+        onSort={sort.toggle}
+        labelledBy="totals-h"
+        minWidth={1040}
+      />
+      <CardFooter className="text-small text-fg-muted">
+        Урон — за раунд. Размен — месть за союзника не позже 5 с. Клатчи — выиграно / попыток. Гранаты — урон HE и огнём в
+        среднем за карту. Новые колонки шкалой не окрашиваются.
+      </CardFooter>
+    </>
   )
 }

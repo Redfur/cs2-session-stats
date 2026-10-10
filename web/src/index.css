@@ -40,6 +40,10 @@
   --color-team-a: #9a8cff;
   --color-team-b: #3dd6b5;
 
+  /* стороны в раунде: CT синий, T оранжевый; мягкий фон — те же цвета с прозрачностью 15% */
+  --color-side-ct: #5e9beb;
+  --color-side-t: #e0823f;
+
   /* шкала метрик и статусы */
   --color-metric-good: #9bdb5c;
   --color-metric-mid: #c9ced6;
