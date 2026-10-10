@@ -73,8 +73,8 @@
   - Урон HE и урон огнём (Molotov + Incendiary) — по здоровью противников.
   - Ослеплений — уникальные пары «флешка — противник» с длительностью > 0.
   - Смоков брошено — `GrenadeProjectileThrow` со смоком.
-  - Убийства гранатами — убийства противников HE, огнём и ударом гранатой.
-  - Средние считаются за карту: сумма / число покрытых матчей.
+  - Убийства гранатами — убийства противников HE, огнём и ударом гранатой. Это сумма за период с разбивкой «HE / огонь», а не среднее.
+  - Остальные показатели гранат — средние за карту: сумма / число покрытых матчей.
 - **Бомба.**
   - Постановки — `BombPlanted`, начато постановок — `BombPlantBegin`, прервано = начато − успешно, но не меньше 0.
   - Дефьюзы и начатые дефьюзы — аналогично по `BombDefused` и `BombDefuseStart`.
@@ -104,7 +104,7 @@
 | Таблица / колонки | Что хранит |
 | --- | --- |
 | `matches`: `first_round`, `restored_round`, `has_damage_events`, `has_flash_events`, `pov`, `duration_ms`, `ext_rounds` | признаки записи и знаменатель подробных колонок |
-| `match_player_ext(match_id, steam_id, …)` | размены (traded_deaths, trade_kills), урон (dealt, taken), ассисты (flash, damage), выживание по сторонам (rounds_t/ct, survived_t/ct, alive_ms_t/ct), гранаты (he_damage, fire_damage, flashed, smokes, grenade_kills), детали убийств (smoke, wallbang, noscope, blind, distance_sum, distance_kills), бомба (plants, plant_starts, defuses, defuse_starts) |
+| `match_player_ext(match_id, steam_id, …)` | размены (traded_deaths, trade_kills), урон (dealt, taken), ассисты (flash, damage), выживание по сторонам (rounds_t/ct, survived_t/ct, alive_ms_t/ct), гранаты (he_damage, fire_damage, flashed, smokes, he_kills, fire_kills, impact_kills), детали убийств (smoke, wallbang, noscope, blind, distance_sum, distance_kills), бомба (plants, plant_starts, defuses, defuse_starts) |
 | `match_player_weapons(match_id, steam_id, weapon, kills, hs_kills, damage, shots, hits, hs_hits)` | оружие |
 | `match_rounds(match_id, number, winner, side_a, reason, start_ms, end_ms, restored)` | хронология |
 | `match_kills(match_id, round, seq, time_ms, killer_id, victim_id, assister_id, weapon, headshot, flash_assist, through_smoke, wallbang, noscope, attacker_blind, distance, traded)` | ход раунда |
@@ -171,11 +171,9 @@
   - Высота 16 px, прозрачность 82 %.
   - Ключ — код оружия; `knife_*` и `bayonet` дают нож.
   - Неизвестное оружие — заглушка с вопросом и исходным именем в подсказке.
-  - Иконки принадлежат Valve, использование только некоммерческое.
 
 ### 8. Отличия от макетов
 
-- На вкладке «Гранаты и бомба» добавлен показатель «Убийства гранатами»: на него ссылается сноска вкладки «Оружие». Макет `S15` нужно дополнить ячейкой.
 - В таблице клатчей макета есть колонки «Ничьи» и «Исход неизвестен». Они остаются, хотя обе почти всегда нулевые: раунд без победителя парсер отбрасывает, а «неизвестен» бывает только в восстановленном последнем раунде.
 
 ## Risks / Trade-offs
@@ -184,7 +182,6 @@
 - [Выстрелы дробовика и очередей] → Один `WeaponFire` на выстрел проверить на демке. Попадания дроби дают несколько `PlayerHurt`, поэтому выстрелы и попадания — счётчики, а не процент.
 - [POV из заголовка ненадёжен] → Если на демках признак не читается, бейдж POV не показывается, а покрытие опирается на `HasDamageEvents` и `HasFlashEvents`.
 - [Объём журнала] → Около 200 убийств на матч. Строки `match_kills` и `match_rounds` малы, рост БД незаметен.
-- [Иконки Valve] → Только некоммерческое использование. Сервис не публичный, это записывается в README.
 - [Время обработки] → Дополнительные обработчики событий. Измерить на длинной демке с овертаймом, сравнить с текущей версией.
 
 ## Migration Plan
