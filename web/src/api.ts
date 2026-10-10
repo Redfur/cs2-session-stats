@@ -72,6 +72,42 @@ export interface SessionDetails {
   session: Session
   matches: Match[]
   players: PlayerRow[]
+  // загрузки по ссылке: в работе, с ошибкой и завершённые, где не все карты стали новыми матчами
+  imports: Import[]
+}
+
+export type ImportStatus = 'queued' | 'downloading' | 'done' | 'failed'
+
+// Import — загрузка по ссылке на матч платформы, демку скачивает сервер.
+export interface Import {
+  id: number
+  sessionId: number
+  url: string
+  platform: string
+  externalId: string
+  status: ImportStatus
+  error?: string
+  bytesDone: number
+  bytesTotal?: number
+  // итог по каждой карте: как у загрузки файла
+  results: UploadResult[]
+  createdAt: string
+  finishedAt?: string
+}
+
+// ImportAddResult — итог добавления одной ссылки.
+export interface ImportAddResult {
+  url: string
+  status: 'accepted' | 'retried' | 'exists' | 'downloading' | 'error'
+  platform?: string
+  externalId?: string
+  importId?: number
+  sessionId?: number
+  sessionTitle?: string
+  sessionDate?: string
+  matchId?: number
+  ordinal?: number
+  error?: string
 }
 
 export interface MatchDetails {
@@ -211,6 +247,12 @@ export const api = {
   getMatchDuels: (id: string | number) => request<MatchDuels>('GET', `/api/matches/${id}/duels`),
   getSessionDuels: (id: string | number) => request<SessionDuels>('GET', `/api/sessions/${id}/duels`),
   getPlayerDuels: (steamId: string, query: string) => request<PlayerDuels>('GET', `/api/players/${steamId}/duels?${query}`),
+  // text — ввод поля как есть: ссылки через пробел или перевод строки
+  addImports: (sessionId: string, text: string) =>
+    request<ImportAddResult[]>('POST', `/api/sessions/${sessionId}/imports`, { text }),
+  retryImport: (id: number) => request<Import>('POST', `/api/imports/${id}/retry`),
+  // убирает загрузку и прерывает скачивание; созданные матчи остаются
+  deleteImport: (id: number) => request<void>('DELETE', `/api/imports/${id}`),
 
   // Отправляет один файл. XHR вместо fetch: у fetch нет прогресса отправки, а демки весят сотни мегабайт.
   // При signal.abort() отправка обрывается, промис отклоняется с DOMException AbortError.
@@ -252,6 +294,10 @@ export const api = {
       xhr.send(form)
     })
   },
+}
+
+export function isImportActive(x: Import): boolean {
+  return x.status === 'queued' || x.status === 'downloading'
 }
 
 export function isProcessing(m: Match): boolean {

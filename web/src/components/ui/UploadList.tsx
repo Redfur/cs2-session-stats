@@ -5,6 +5,7 @@ import { formatBytes, formatBytesOf, formatEta } from '../../format'
 import { isPending, type UploadItem } from '../../upload'
 import { Badge } from './Badge'
 import { Button } from './Button'
+import { ProgressBar as Bar } from './ProgressBar'
 import { cx } from './cx'
 
 interface UploadListProps {
@@ -17,21 +18,6 @@ interface UploadListProps {
   onCancel: (id: number) => void
   onCancelAll: () => void
   onClear: () => void
-}
-
-function Bar({ value, done, label }: { value: number; done?: boolean; label: string }) {
-  return (
-    <div
-      className="mt-2 h-1 overflow-hidden rounded-xs bg-surface-hover"
-      role="progressbar"
-      aria-valuenow={Math.round(value)}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-label={label}
-    >
-      <span className={cx('block h-full rounded-xs', done ? 'bg-status-ok' : 'bg-status-progress')} style={{ width: `${value}%` }} />
-    </div>
-  )
 }
 
 // UploadList — очередь загрузки: номер будущего матча, прогресс по каждому файлу и итог.

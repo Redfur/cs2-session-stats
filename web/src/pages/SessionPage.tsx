@@ -1,8 +1,10 @@
 import { Calendar, Pencil, RefreshCw, Trash } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
-import { api, isProcessing, sessionTitle, type Match, type SessionDetails } from '../api'
+import { api, isImportActive, isProcessing, sessionTitle, type Match, type SessionDetails } from '../api'
+import { ImportList } from '../components/ImportList'
 import { InlineEdit } from '../components/InlineEdit'
+import { MatchLinkForm } from '../components/MatchLinkForm'
 import { MatchesTable } from '../components/MatchesTable'
 import { SessionDuelsCard } from '../components/Duels'
 import { PageError, PageLoading } from '../components/PageState'
@@ -64,8 +66,8 @@ export function SessionPage() {
 
   const uploads = useUploadQueue(id, load)
 
-  // пока есть матчи в обработке — опрашиваем сервер
-  const inProgress = data?.matches.some(isProcessing) ?? false
+  // пока есть матчи в обработке или скачивания по ссылкам — опрашиваем сервер
+  const inProgress = (data?.matches.some(isProcessing) || data?.imports.some(isImportActive)) ?? false
   useEffect(() => {
     if (!inProgress) return
     const t = setInterval(load, POLL_MS)
@@ -78,7 +80,7 @@ export function SessionPage() {
     return <PageError title="Не удалось открыть сессию" error={error} onRetry={load} back={{ to: '/', label: 'К списку сессий' }} />
   if (!data) return <PageLoading />
 
-  const { session, matches, players } = data
+  const { session, matches, players, imports } = data
   const title = sessionTitle(session)
   const withResult = matches.filter((m) => m.hasResult).length
   const nowReparsing = matches.filter(reparsing).length
@@ -144,19 +146,24 @@ export function SessionPage() {
 
   const processingNumbers = matches.flatMap((m, i) => (!m.hasResult && isProcessing(m) ? [`#${i + 1}`] : []))
 
+  const ordinalOf = (matchId: number) => {
+    const i = matches.findIndex((m) => m.id === matchId)
+    return i >= 0 ? i + 1 : undefined
+  }
   const uploadList = (
     <UploadList
       items={uploads.items}
       nextNumber={nextNumber}
       sessionId={session.id}
-      ordinalOf={(matchId) => {
-        const i = matches.findIndex((m) => m.id === matchId)
-        return i >= 0 ? i + 1 : undefined
-      }}
+      ordinalOf={ordinalOf}
       onCancel={uploads.cancel}
       onCancelAll={uploads.cancelAll}
       onClear={uploads.clear}
     />
+  )
+
+  const importList = (
+    <ImportList imports={imports} ordinalOf={ordinalOf} onChanged={load} onError={(title, text) => setActionError({ title, text })} />
   )
 
   return (
@@ -238,7 +245,13 @@ export function SessionPage() {
       {matches.length === 0 && (
         <>
           <DropZone variant="large" onFiles={uploads.add} nextNumber={nextNumber} rejected={uploads.rejected} />
-          {uploads.items.length > 0 && <Card as="div">{uploadList}</Card>}
+          <MatchLinkForm sessionId={id} variant="large" onAdded={load} />
+          {(uploads.items.length > 0 || imports.length > 0) && (
+            <Card as="div">
+              {uploadList}
+              {importList}
+            </Card>
+          )}
         </>
       )}
 
@@ -323,8 +336,12 @@ export function SessionPage() {
             onDelete={(match, number) => setConfirm({ kind: 'match', match, number })}
           />
           {uploadList}
+          {importList}
           <CardFooter>
-            <DropZone variant="strip" onFiles={uploads.add} nextNumber={nextNumber} rejected={uploads.rejected} />
+            <div className="flex flex-col gap-4">
+              <DropZone variant="strip" onFiles={uploads.add} nextNumber={nextNumber} rejected={uploads.rejected} />
+              <MatchLinkForm sessionId={id} variant="strip" onAdded={load} />
+            </div>
           </CardFooter>
         </Card>
       )}

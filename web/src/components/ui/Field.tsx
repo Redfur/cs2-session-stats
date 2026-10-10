@@ -2,7 +2,7 @@ import type { InputHTMLAttributes, ReactNode, Ref } from 'react'
 import { cx } from './cx'
 
 export const inputClass =
-  'block h-9 w-full rounded-md border border-border-strong bg-surface-2 px-3 text-[14px] leading-5 font-medium tabular-nums text-fg outline-none transition-[border-color,box-shadow] placeholder:text-placeholder enabled:hover:border-border-hover focus:border-accent focus:shadow-[0_0_0_3px_rgb(232_176_75/0.14)] disabled:cursor-not-allowed disabled:opacity-45'
+  'block h-9 w-full rounded-md border border-border-strong bg-surface-2 px-3 text-[14px] leading-5 font-medium tabular-nums text-fg outline-none transition-[border-color,box-shadow] placeholder:text-placeholder enabled:hover:border-border-hover focus:border-accent focus:shadow-[0_0_0_3px_rgb(232_176_75/0.14)] disabled:cursor-not-allowed disabled:opacity-45 aria-[invalid=true]:border-status-error aria-[invalid=true]:ring-3 aria-[invalid=true]:ring-status-error/14'
 
 export function Input({ className, ref, ...rest }: InputHTMLAttributes<HTMLInputElement> & { ref?: Ref<HTMLInputElement> }) {
   return <input ref={ref} className={cx(inputClass, rest.type === 'date' && 'px-2', className)} {...rest} />
