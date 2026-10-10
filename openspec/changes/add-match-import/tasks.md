@@ -124,7 +124,7 @@
 
 ## 7. Приёмка
 
-- [ ] 7.1 E2E в Docker на копии `data/`:
+- [x] 7.1 E2E в Docker на копии `data/`:
   - `https://cs2.fastcup.net/matches/27802385` даёт один матч, счёт сверен с табло;
   - `https://cybershoke.net/match/12552678` даёт один матч;
   - `https://cybershoke.net/ru/match/12578063` даёт два матча в порядке map1, map2;
@@ -135,7 +135,7 @@
   - удаление сессии во время скачивания прерывает его без мусора в `data/tmp`;
   - перезапуск контейнера во время скачивания возобновляет его.
 - [ ] 7.2 Живая проверка Bo3 FastCup. Остаётся открытой, пока у пользователя нет ссылки на сыгранную серию FastCup, — сказать об этом при завершении.
-- [ ] 7.3 `make test`, `cd web && npm run lint`, `openspec validate add-match-import --strict` проходят.
+- [x] 7.3 `make test`, `cd web && npm run lint`, `openspec validate add-match-import --strict` проходят.
 
 ## Workflow follow-up
 
