@@ -86,6 +86,16 @@ type Service struct {
 // Ingest принимает один файл в сессию. Ошибки по файлу возвращаются в FileResult,
 // чтобы остальные файлы загрузки обрабатывались независимо.
 func (s *Service) Ingest(ctx context.Context, sessionID int64, name string, r io.Reader) FileResult {
+	return s.ingest(ctx, sessionID, name, r, nil)
+}
+
+// IngestImport принимает демку, скачанную по ссылке на матч: матч запоминает источник
+// и встаёт в сессии по времени игры (store.AddMatchFrom).
+func (s *Service) IngestImport(ctx context.Context, sessionID int64, name string, r io.Reader, src *store.MatchSource) FileResult {
+	return s.ingest(ctx, sessionID, name, r, src)
+}
+
+func (s *Service) ingest(ctx context.Context, sessionID int64, name string, r io.Reader, src *store.MatchSource) FileResult {
 	res := FileResult{FileName: name}
 	fail := func(err error) FileResult {
 		res.Status, res.Error = Failed, err.Error()
@@ -115,7 +125,7 @@ func (s *Service) Ingest(ctx context.Context, sessionID int64, name string, r io
 	if err := s.Demos.Save(sum, tmpPath); err != nil {
 		return fail(err)
 	}
-	m, err := s.Store.AddMatch(ctx, sessionID, sum, name)
+	m, err := s.Store.AddMatchFrom(ctx, sessionID, sum, name, src)
 	var dup *store.DuplicateError
 	switch {
 	case errors.As(err, &dup):

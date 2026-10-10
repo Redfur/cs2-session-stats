@@ -17,6 +17,7 @@ import (
 
 	"cs2stats/internal/api"
 	"cs2stats/internal/config"
+	"cs2stats/internal/importer"
 	"cs2stats/internal/ingest"
 	"cs2stats/internal/parser"
 	"cs2stats/internal/stats"
@@ -86,13 +87,22 @@ func serve() error {
 	workerDone := make(chan error, 1)
 	go func() { workerDone <- w.Run(ctx) }()
 
+	ing := &ingest.Service{Store: st, Demos: demos, TmpDir: tmpDir, MaxSize: cfg.MaxDemoSize}
+	imp := importer.New(st, ing, tmpDir, cfg.MaxDemoSize, w.Wake, logger)
+	go func() {
+		if err := imp.Run(ctx); err != nil {
+			logger.Error("скачивание по ссылкам остановлено", "err", err)
+		}
+	}()
+
 	srv := &http.Server{
 		Addr: cfg.Addr,
 		Handler: (&api.Server{
-			Store:  st,
-			Ingest: &ingest.Service{Store: st, Demos: demos, TmpDir: tmpDir, MaxSize: cfg.MaxDemoSize},
-			Wake:   w.Wake,
-			Log:    logger,
+			Store:   st,
+			Ingest:  ing,
+			Wake:    w.Wake,
+			Imports: imp,
+			Log:     logger,
 		}).Handler(webui.Default()),
 		// без ReadTimeout: загрузка демок по медленному каналу может идти долго
 		ReadHeaderTimeout: 10 * time.Second,

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/klauspost/compress/zstd"
 
@@ -223,4 +224,34 @@ func TestRemoveDemos(t *testing.T) {
 		t.Fatalf("файл повторной загрузки не сохранён: %v", err)
 	}
 	rc.Close()
+}
+
+// Демка из загрузки по ссылке запоминает загрузку и источник; ручная загрузка — нет.
+func TestIngestImport(t *testing.T) {
+	e := newEnv(t, 1<<20)
+	ctx := context.Background()
+	x, err := e.store.AddImport(ctx, e.session, "https://cs2.fastcup.net/matches/27802385", "fastcup", "27802385")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := &store.MatchSource{ImportID: &x.ID, Platform: "fastcup", Number: 27802385, Map: 1,
+		PlayedAt: time.Date(2026, 10, 7, 16, 17, 57, 0, time.UTC)}
+	res := e.svc.IngestImport(ctx, e.session, "27802385_24844407-de_ancient.dem", bytes.NewReader(sampleDemo), src)
+	if res.Status != Accepted {
+		t.Fatalf("приём: %+v", res)
+	}
+	manual := e.ingest("manual.dem", append([]byte("другая "), sampleDemo...))
+	if manual.Status != Accepted {
+		t.Fatalf("ручная загрузка: %+v", manual)
+	}
+
+	list, err := e.store.ListImportMatches(ctx, x.ID)
+	if err != nil || len(list) != 1 || list[0].ID != res.MatchID {
+		t.Fatalf("матчи загрузки: %+v %v", list, err)
+	}
+	found, err := e.store.FindImportSource(ctx, e.session, "fastcup", "27802385", 27802385)
+	if err != nil || found.Match == nil || found.Match.ID != res.MatchID {
+		t.Fatalf("источник матча: %+v %v", found, err)
+	}
+	e.assertTmpEmpty(t)
 }

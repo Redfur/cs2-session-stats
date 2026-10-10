@@ -20,10 +20,11 @@ import (
 )
 
 type testEnv struct {
-	srv   *httptest.Server
-	store *store.Store
-	demos *ingest.LocalStorage
-	woken int
+	srv     *httptest.Server
+	store   *store.Store
+	demos   *ingest.LocalStorage
+	woken   int
+	imports *fakeImports
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -38,13 +39,14 @@ func newTestEnv(t *testing.T) *testEnv {
 	tmp := filepath.Join(dir, "tmp")
 	os.MkdirAll(tmp, 0o755)
 
-	e := &testEnv{store: st, demos: demos}
+	e := &testEnv{store: st, demos: demos, imports: &fakeImports{}}
 	s := &Server{
-		Store:  st,
-		Ingest: &ingest.Service{Store: st, Demos: demos, TmpDir: tmp, MaxSize: 1 << 20},
-		Wake:   func() { e.woken++ },
-		Log:    slog.New(slog.DiscardHandler),
-		Now:    func() time.Time { return time.Date(2026, 10, 9, 20, 0, 0, 0, time.Local) },
+		Store:   st,
+		Ingest:  &ingest.Service{Store: st, Demos: demos, TmpDir: tmp, MaxSize: 1 << 20},
+		Wake:    func() { e.woken++ },
+		Imports: e.imports,
+		Log:     slog.New(slog.DiscardHandler),
+		Now:     func() time.Time { return time.Date(2026, 10, 9, 20, 0, 0, 0, time.Local) },
 	}
 	e.srv = httptest.NewServer(s.Handler(nil))
 	t.Cleanup(e.srv.Close)

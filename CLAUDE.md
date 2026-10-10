@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Анализатор демок CS2 для дружеских 5х5. Статистика считается только по играм компании внутри **игровых сессий** (вечеров), а не по всем матчам игроков.
-Матчи играются кастомными на **FastCup** и **Cybershoke**. Публичного API для скачивания демок у них нет, поэтому демки загружаются вручную.
+Матчи играются кастомными на **FastCup** и **Cybershoke**. Публичного API для скачивания демок у них нет: демки загружаются файлом или по ссылке на матч (сервис сам находит демку через недокументированные API страниц платформ и скачивает её).
 Пользовательская документация — в `README.md`, требования — в `openspec/specs/`.
 
 ## Процесс работы
@@ -50,8 +50,9 @@ internal/config    env: DATA_DIR (./data), ADDR (:8080), MAX_DEMO_SIZE (1 ГБ),
 internal/parser    демка → доменная модель Match/Round/Kill/Damage (demoinfocs-golang/v5); без зависимостей от demoinfocs снаружи
 internal/stats     Compute(parser.Match) → []PlayerStats; Counters и производные показатели
 internal/ingest    приём файла: формат, распаковка gz/bz2/zst/zip, лимит, sha256, дедуп; Storage (LocalStorage)
+internal/importer  импорт по ссылке: Platform (FastCup, Cybershoke), проверка ссылок (Add), фоновое скачивание (Run), архивы серий
 internal/worker    очередь матчей; ProcessingVersion; пересчёт устаревших при старте
-internal/store     SQLite: sessions, matches, match_players; миграции migrations/NNN_*.sql через PRAGMA user_version
+internal/store     SQLite: sessions, matches, match_players, imports; миграции migrations/NNN_*.sql через PRAGMA user_version
 internal/api       JSON API на net/http ServeMux; PlayerView для вывода
 internal/webui     раздача SPA: embed при -tags embedweb, иначе с диска (STATIC_DIR)
 web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI + lucide-react; страницы /, /sessions/:id, /matches/:id, /players, /players/:id
@@ -63,10 +64,11 @@ web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI 
 ```
 
 Поток данных: `POST /api/sessions/{id}/demos` → `ingest` сохраняет `data/demos/<sha256>.dem` и создаёт матч `pending` → `worker.Wake()` → `parser.Parse` → `stats.Compute` → `store.SaveMatchResult`.
+По ссылке: `POST /api/sessions/{id}/imports` → `importer.Add` (разбор ссылок, дубликаты, `Platform.Resolve`) → загрузка `queued` в `imports` → `importer.Run` скачивает в `data/tmp/import-*.part` → `ingest.IngestImport` → дальше как у файла.
 
 ## Ключевые решения и инварианты
 
-- **Сессию создаёт пользователь** (дата + название). В демках CS2 нет даты матча, поэтому группировать по времени нельзя. Порядок матчей — порядок загрузки файлов (`ordinal`).
+- **Сессию создаёт пользователь** (дата + название). В демках CS2 нет даты матча, поэтому группировать по времени нельзя. Порядок матчей (`ordinal`) — порядок загрузки файлов, а матчи из ссылок встают по времени игры у платформы.
 - **В БД хранятся только сырые счётчики** (`stats.Counters`). ADR, KAST%, HS%, K/D и rating считаются при чтении. Агрегаты сессии — суммы счётчиков, поэтому они автоматически взвешены по раундам. Rating — HLTV 1.0.
 - **`worker.ProcessingVersion`.** Поднимать при любом изменении `internal/parser`/`internal/stats`, которое меняет сохраняемые счётчики: при старте сервис сам пересчитает старые матчи. Для изменения формул производных показателей поднимать не нужно.
 - **Личные дуэли** хранятся в `match_duels` (все пары соперников, включая нули) и пишутся в той же транзакции, что результат. `matches.result_version` — версия, которой получен сохранённый результат (в отличие от `processed_version`, не меняется при ошибке). Дуэли матча посчитаны, если `has_result = 1 AND result_version >= store.DuelsSinceVersion`. Пары считаются тем же правилом `enemyKill`, что и K.
@@ -76,11 +78,18 @@ web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI 
 - **SteamID64 в JSON — строка**: в JavaScript number он теряет точность.
 - **Фильтры и сортировка — в адресе страницы.** Сортировка: `sort` для главной таблицы, `ss`/`sm`/`sx` для разбивок профиля; значение по умолчанию в адрес не пишется. Шкала метрик сравнивает округлённое отображаемое значение.
 - **Демки загружаются по одной** (`api.uploadDemo` с `AbortSignal`), очередь на клиенте строго последовательна — так порядок матчей совпадает с порядком файлов.
+- **Импорт по ссылке.** Матч появляется только после скачивания и приёма демки: статусы `matches` не меняются, загрузки живут в `imports` (`queued`/`downloading`/`done`/`failed`) и показываются отдельным списком (решение пользователя, макет показывает их строками таблицы матчей). Скачивания — по одному, отдельной горутиной от воркера разбора; при старте `downloading` возвращается в очередь.
+- **Место матча из ссылки** — по `matches.played_at` (время начала карты у платформы): `AddMatchFrom` ставит его перед первым матчем с более поздним известным временем (ключ `played_at, source_number, map_number`), иначе в конец, сдвигая номера. У матчей из файлов времени нет, они не двигаются.
+- **Источник матча** (`source_platform`, `source_number`, `map_number`) хранится в самом матче: по нему ссылка на уже загруженный матч не скачивается повторно, даже если загрузку убрали из списка (`import_id` тогда NULL).
+- **Импорт ходит только на домены платформ** (`Platform.Hosts`, в том числе при редиректах через `CheckRedirect`). Лимит скачивания — `MAX_DEMO_SIZE × число карт в файле`, каждая демка при приёме проверяется `MAX_DEMO_SIZE`.
 - **Схема БД меняется только новой миграцией** `internal/store/migrations/NNN_*.sql` с заполнением существующих строк. Старые миграции не править.
 - **Хранилище демок** — интерфейс `ingest.Storage` (`Save`/`Open`/`Delete`), задел под S3/MinIO. Пока идёт разработка, демки хранятся без срока. Политику хранения для публичного деплоя (внешнее хранилище или удаление после парсинга) решить отдельным change.
 - **Авторизации нет.** Сервис не открывать наружу без reverse proxy.
 
 ## Особенности демок платформ (выяснено сверкой с табло)
+
+- **FastCup, импорт.** Данные матча — `POST https://hasura.fastcup.net/v1/graphql`, запрос `__GetMatch` (`gameId: 3`). Hasura пропускает только запросы из allowlist, поэтому `internal/importer/fastcup_get_match.graphql` — **дословная копия** запроса со страницы матча, без перевода строки в конце (тест `TestFastCupQueryIsVerbatim`). Если импорт отвечает «FastCup изменил формат ответа», снять запрос заново: открыть `https://cs2.fastcup.net/matches/<id>` в headless-браузере, перехватить тело запроса `__GetMatch` и записать его поле `query` в файл. Демка — `maps[].replays[].url` (несжатый `.dem` около 300 МБ, без Content-Length), хранится около 30 дней (`replayExpirationDate`), время карты — `maps[].startedAt`.
+- **Cybershoke, импорт.** `POST https://cybershoke.net/api/api/v1/custom-matches/lobbys/info` с `{"id_lobby": N}`; демка готова при `demo.status == 4`, ссылка — `demo.url_download`. Это zip на всё лобби: Bo1 — `match_<id>.dem`, серия — `match_<id>_map<N>.dem` по одной на сыгранную карту. Время карты — `match_stats.bo.<N>.unixtime_start` (`dates.unixtime_start_match` у серии — время последней карты, не первой). Пустые объекты PHP отдаёт как `[]`.
 
 - **FastCup.** Первый раунд записи идёт до рестарта без события `MatchStart`, и игра его не засчитывает. Парсер сверяет число собранных раундов с `TotalRoundsPlayed` и отбрасывает лишние (`dropRestartedRounds`).
 - **Общее.** События после конца матча (например, суицид на экране итогов) не учитываются: `MatchStartedChanged(false)` закрывает раунд. Флеш-ассисты засчитываются как ассисты, как в табло CS2 и FastCup.

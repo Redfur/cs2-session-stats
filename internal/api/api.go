@@ -25,8 +25,10 @@ type Server struct {
 	Store  *store.Store
 	Ingest *ingest.Service
 	Wake   func() // будит воркер после загрузки демок
-	Log    *slog.Logger
-	Now    func() time.Time
+	// Imports — импорт матчей по ссылке; nil — сервис без импорта (тесты, где он не нужен).
+	Imports Imports
+	Log     *slog.Logger
+	Now     func() time.Time
 }
 
 // Handler возвращает маршруты API; остальные пути обслуживает static (фронтенд).
@@ -39,6 +41,9 @@ func (s *Server) Handler(static http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/sessions/{id}", s.deleteSession)
 	mux.HandleFunc("PUT /api/sessions/{id}/order", s.reorderMatches)
 	mux.HandleFunc("POST /api/sessions/{id}/demos", s.uploadDemos)
+	mux.HandleFunc("POST /api/sessions/{id}/imports", s.addImports)
+	mux.HandleFunc("POST /api/imports/{id}/retry", s.retryImport)
+	mux.HandleFunc("DELETE /api/imports/{id}", s.deleteImport)
 	mux.HandleFunc("GET /api/matches/{id}", s.getMatch)
 	mux.HandleFunc("DELETE /api/matches/{id}", s.deleteMatch)
 	mux.HandleFunc("POST /api/matches/{id}/reparse", s.reparseMatch)
@@ -179,6 +184,9 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 		s.storeError(w, err, "сессия не найдена")
 		return
 	}
+	if s.Imports != nil { // загрузки удалены каскадом, идущее скачивание прерываем
+		s.Imports.CancelSession(id)
+	}
 	s.removeDemos(r, shas)
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -235,9 +243,10 @@ func (s *Server) reorderMatches(w http.ResponseWriter, r *http.Request) {
 }
 
 type sessionResponse struct {
-	Session store.Session `json:"session"`
-	Matches []store.Match `json:"matches"`
-	Players []PlayerView  `json:"players"`
+	Session store.Session  `json:"session"`
+	Matches []store.Match  `json:"matches"`
+	Players []PlayerView   `json:"players"`
+	Imports []store.Import `json:"imports"`
 }
 
 func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
@@ -260,7 +269,12 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, sessionResponse{Session: sess, Matches: matches, Players: totalsView(agg)})
+	imports, err := s.Store.ListSessionImports(r.Context(), id)
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, sessionResponse{Session: sess, Matches: matches, Players: totalsView(agg), Imports: imports})
 }
 
 func (s *Server) uploadDemos(w http.ResponseWriter, r *http.Request) {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"cs2stats/internal/stats"
 )
@@ -72,9 +73,29 @@ func scanMatch(row scanner) (Match, error) {
 	return m, err
 }
 
-// AddMatch добавляет матч в конец сессии в статусе pending.
+// MatchSource — откуда матч: загрузка по ссылке, матч платформы и время начала его карты.
+type MatchSource struct {
+	ImportID *int64
+	Platform string
+	Number   int64     // номер матча на платформе
+	Map      int       // номер карты в серии, с 1
+	PlayedAt time.Time // время начала карты у платформы
+}
+
+// playedAtLayout — единый формат played_at: строки сравниваются как время.
+const playedAtLayout = "2006-01-02T15:04:05Z"
+
+// AddMatch добавляет матч из файла в конец сессии в статусе pending.
 // Если демка с таким sha256 уже есть, возвращает *DuplicateError.
 func (s *Store) AddMatch(ctx context.Context, sessionID int64, sha256, originalName string) (Match, error) {
+	return s.AddMatchFrom(ctx, sessionID, sha256, originalName, nil)
+}
+
+// AddMatchFrom добавляет матч в статусе pending. Матч без источника идёт в конец сессии.
+// Матч из ссылки встаёт перед первым матчем сессии с более поздним известным временем игры
+// (при равном времени — по номеру матча платформы и карты), а если такого нет — в конец;
+// номера следующих матчей сдвигаются. Матчи без времени в выборе места не участвуют.
+func (s *Store) AddMatchFrom(ctx context.Context, sessionID int64, sha256, originalName string, src *MatchSource) (Match, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Match{}, err
@@ -89,11 +110,40 @@ func (s *Store) AddMatch(ctx context.Context, sessionID int64, sha256, originalN
 		return Match{}, err
 	}
 
+	var importID, platform, number, mapNumber, playedAt any
+	var pos sql.NullInt64
+	if src != nil {
+		at := src.PlayedAt.UTC().Format(playedAtLayout)
+		importID, platform, number, mapNumber, playedAt = src.ImportID, src.Platform, src.Number, src.Map, at
+		err := tx.QueryRowContext(ctx, `
+			SELECT min(ordinal) FROM matches
+			WHERE session_id = ? AND played_at IS NOT NULL
+			  AND (played_at, source_number, map_number) > (?, ?, ?)`,
+			sessionID, at, src.Number, src.Map).Scan(&pos)
+		if err != nil {
+			return Match{}, err
+		}
+	}
+	if pos.Valid {
+		// сдвиг через отрицательные номера: промежуточное состояние не нарушает UNIQUE (session_id, ordinal)
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE matches SET ordinal = -(ordinal + 1) WHERE session_id = ? AND ordinal >= ?", sessionID, pos.Int64); err != nil {
+			return Match{}, err
+		}
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE matches SET ordinal = -ordinal WHERE session_id = ? AND ordinal < 0", sessionID); err != nil {
+			return Match{}, err
+		}
+	}
+
 	m, err := scanMatch(tx.QueryRowContext(ctx, `
-		INSERT INTO matches (session_id, ordinal, sha256, original_name, status, created_at)
-		VALUES (?, (SELECT coalesce(max(ordinal), 0) + 1 FROM matches WHERE session_id = ?), ?, ?, ?, ?)
+		INSERT INTO matches (session_id, ordinal, sha256, original_name, status, created_at,
+			import_id, source_platform, source_number, map_number, played_at)
+		VALUES (?, coalesce(?, (SELECT coalesce(max(ordinal), 0) + 1 FROM matches WHERE session_id = ?)),
+			?, ?, ?, ?, ?, ?, ?, ?, ?)
 		RETURNING `+matchColumns,
-		sessionID, sessionID, sha256, originalName, StatusPending, s.timestamp()))
+		sessionID, pos, sessionID, sha256, originalName, StatusPending, s.timestamp(),
+		importID, platform, number, mapNumber, playedAt))
 	if err != nil {
 		return Match{}, err
 	}

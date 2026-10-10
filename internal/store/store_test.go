@@ -29,10 +29,10 @@ func TestMigrationsIdempotent(t *testing.T) {
 		if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 			t.Fatal(err)
 		}
-		if version != 3 {
-			t.Fatalf("user_version = %d, ожидалось 3", version)
+		if version != 4 {
+			t.Fatalf("user_version = %d, ожидалось 4", version)
 		}
-		for _, table := range []string{"sessions", "matches", "match_players", "match_duels"} {
+		for _, table := range []string{"sessions", "matches", "match_players", "match_duels", "imports"} {
 			var n int
 			if err := s.db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&n); err != nil || n != 1 {
 				t.Fatalf("таблица %s не создана (err=%v)", table, err)
@@ -111,5 +111,42 @@ func TestMigration003Backfill(t *testing.T) {
 		if v != want {
 			t.Errorf("%s: result_version=%d, ожидалось %d", sha, v, want)
 		}
+	}
+}
+
+// БД версии 3 схемы мигрирует: у старых матчей нет загрузки и времени игры, они читаются как раньше.
+func TestMigration004Backfill(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	raw, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"001_init.sql", "002_reprocessing.sql", "003_duels.sql"} {
+		body, _ := migrationsFS.ReadFile("migrations/" + name)
+		if _, err := raw.Exec(string(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw.Exec("PRAGMA user_version = 3")
+	raw.Exec("INSERT INTO sessions (id, date, created_at) VALUES (1, '2026-10-08', 'x')")
+	raw.Exec("INSERT INTO matches (session_id, ordinal, sha256, original_name, status, created_at, has_result, processed_version, result_version) VALUES (1, 1, 'old', 'f.dem', 'done', 'x', 1, 2, 2)")
+	raw.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var importID, playedAt, platform, source, mapNumber sql.NullString
+	if err := s.db.QueryRow("SELECT import_id, played_at, source_platform, source_number, map_number FROM matches WHERE sha256 = 'old'").
+		Scan(&importID, &playedAt, &platform, &source, &mapNumber); err != nil {
+		t.Fatal(err)
+	}
+	if importID.Valid || playedAt.Valid || platform.Valid || source.Valid || mapNumber.Valid {
+		t.Errorf("новые колонки старого матча не NULL: %v %v %v %v %v", importID, playedAt, platform, source, mapNumber)
+	}
+	m, err := s.FindMatchBySHA(t.Context(), "old")
+	if err != nil || m.Ordinal != 1 || !m.HasResult {
+		t.Fatalf("старый матч читается неверно: %+v, %v", m, err)
 	}
 }

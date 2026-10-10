@@ -1,0 +1,27 @@
+{
+ "result": "success",
+ "data": {
+  "id_lobby": 12552678,
+  "status_match": 5,
+  "match_settings": {
+   "bo": 1
+  },
+  "match_stats": {
+   "bo": {
+    "1": {
+     "id_match": 12265349,
+     "unixtime_start": 1791552322,
+     "unixtime_end": 1791554015
+    }
+   }
+  },
+  "dates": {
+   "unixtime_start_match": 1791552322,
+   "unixtime_match_end": 1791554015
+  },
+  "demo": {
+   "status": 4,
+   "url_download": "https://cdn-de-1.cybershoke.net/demos/12552678?series=1"
+  }
+ }
+}

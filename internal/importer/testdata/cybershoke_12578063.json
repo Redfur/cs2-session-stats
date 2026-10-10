@@ -1,0 +1,32 @@
+{
+ "result": "success",
+ "data": {
+  "id_lobby": 12578063,
+  "status_match": 5,
+  "match_settings": {
+   "bo": 3
+  },
+  "match_stats": {
+   "bo": {
+    "1": {
+     "id_match": 12297039,
+     "unixtime_start": 1791581424,
+     "unixtime_end": 1791583768
+    },
+    "2": {
+     "id_match": 12298020,
+     "unixtime_start": 1791583791,
+     "unixtime_end": 1791585871
+    }
+   }
+  },
+  "dates": {
+   "unixtime_start_match": 1791583791,
+   "unixtime_match_end": 1791585871
+  },
+  "demo": {
+   "status": 4,
+   "url_download": "https://cdn-de-1.cybershoke.net/demos/12578063?series=1"
+  }
+ }
+}
