@@ -145,7 +145,7 @@ export function MatchLinkForm({ sessionId, variant, onAdded }: MatchLinkFormProp
               autoComplete="off"
               spellCheck={false}
               className="pl-9"
-              placeholder="https://cs2.fastcup.net/matches/26462743"
+              placeholder="https://cs2.fastcup.net/matches/…"
               value={value}
               disabled={busy}
               aria-invalid={hasError || undefined}

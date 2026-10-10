@@ -84,7 +84,7 @@ func NewFastCup() *FastCup {
 
 func (*FastCup) Name() string              { return "fastcup" }
 func (*FastCup) Title() string             { return "FastCup" }
-func (*FastCup) Example() string           { return "https://cs2.fastcup.net/matches/26462743" }
+func (*FastCup) Example() string           { return "https://cs2.fastcup.net/matches/<номер>" }
 func (*FastCup) MatchURL(id string) string { return "https://cs2.fastcup.net/matches/" + id }
 func (*FastCup) PageHosts() []string       { return []string{"cs2.fastcup.net", "fastcup.net"} }
 func (*FastCup) Hosts() []string           { return []string{"fastcup.net"} }
@@ -191,7 +191,7 @@ func NewCybershoke() *Cybershoke {
 
 func (*Cybershoke) Name() string              { return "cybershoke" }
 func (*Cybershoke) Title() string             { return "Cybershoke" }
-func (*Cybershoke) Example() string           { return "https://cybershoke.net/match/12552678" }
+func (*Cybershoke) Example() string           { return "https://cybershoke.net/match/<номер>" }
 func (*Cybershoke) MatchURL(id string) string { return "https://cybershoke.net/match/" + id }
 func (*Cybershoke) PageHosts() []string       { return []string{"cybershoke.net"} }
 func (*Cybershoke) Hosts() []string           { return []string{"cybershoke.net"} }

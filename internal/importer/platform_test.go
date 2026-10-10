@@ -29,15 +29,15 @@ func TestParseURL(t *testing.T) {
 	}
 
 	bad := []struct{ in, want string }{
-		{"https://cs2.fastcup.net/profile/1873320", "Это ссылка на профиль, а не на матч. Нужна страница матча, например https://cs2.fastcup.net/matches/26462743"},
+		{"https://cs2.fastcup.net/profile/1873320", "Это ссылка на профиль, а не на матч. Нужна страница матча, например https://cs2.fastcup.net/matches/<номер>"},
 		{"https://cs2.fastcup.net/id1873320", "Это ссылка на профиль"},
-		{"https://cybershoke.net/ru/profile/76561198000000000", "Это ссылка на профиль, а не на матч. Нужна страница матча, например https://cybershoke.net/match/12552678"},
+		{"https://cybershoke.net/ru/profile/76561198000000000", "Это ссылка на профиль, а не на матч. Нужна страница матча, например https://cybershoke.net/match/<номер>"},
 		{"https://cs2.fastcup.net/matches", "Это не страница матча"},
 		{"https://cs2.fastcup.net/matches/abc", "Это не страница матча"},
 		{"https://cybershoke.net/servers", "Это не страница матча"},
 		{"https://replays.fastcup.net/16324690/27802385_24844407_2610071617-de_ancient.dem", "Это не страница матча"},
 		{"https://cdn-de-1.cybershoke.net/demos/12552678?series=1", "Это не страница матча"},
-		{"https://example.com/match/1", "Поддерживаются ссылки на матчи FastCup (https://cs2.fastcup.net/matches/26462743) и Cybershoke (https://cybershoke.net/match/12552678)"},
+		{"https://example.com/match/1", "Поддерживаются ссылки на матчи FastCup (https://cs2.fastcup.net/matches/<номер>) и Cybershoke (https://cybershoke.net/match/<номер>)"},
 		{"https://www.faceit.com/ru/cs2/room/1-abc", "Поддерживаются ссылки на матчи"},
 		{"https://fastcup.net.evil.com/matches/1", "Поддерживаются ссылки на матчи"},
 		{"ftp://cs2.fastcup.net/matches/1", "Поддерживаются ссылки на матчи"},

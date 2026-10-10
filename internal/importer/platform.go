@@ -36,7 +36,7 @@ type Match struct {
 type Platform interface {
 	Name() string    // идентификатор: fastcup, cybershoke
 	Title() string   // название для текстов: FastCup, Cybershoke
-	Example() string // пример ссылки на матч
+	Example() string // шаблон ссылки на матч для текстов ошибок, без номера реального матча
 	MatchURL(id string) string
 	// PageHosts — хосты страниц матчей; Hosts — домены, к которым разрешены запросы (с поддоменами).
 	PageHosts() []string
