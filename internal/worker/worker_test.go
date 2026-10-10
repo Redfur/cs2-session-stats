@@ -87,6 +87,9 @@ func TestWorker(t *testing.T) {
 	if len(players) != 2 || players[0].Kills != 1 {
 		t.Errorf("игроки: %+v", players)
 	}
+	if ext, err := st.GetMatchExt(ctx, stuck.ID); err != nil || !ext.Covered || len(ext.Rounds) != 1 || len(ext.Kills) != 1 {
+		t.Errorf("расширенные данные: %+v, %v", ext, err)
+	}
 
 	broken, _ := st.AddMatch(ctx, sess.ID, "broken", "2.dem")
 	panicky, _ := st.AddMatch(ctx, sess.ID, "panic", "3.dem")
@@ -275,5 +278,8 @@ func TestMatchDeletedDuringProcessing(t *testing.T) {
 func TestProcessingVersionHasDuels(t *testing.T) {
 	if ProcessingVersion < store.DuelsSinceVersion {
 		t.Fatalf("ProcessingVersion %d ниже store.DuelsSinceVersion %d", ProcessingVersion, store.DuelsSinceVersion)
+	}
+	if ProcessingVersion < store.ExtendedSinceVersion {
+		t.Fatalf("ProcessingVersion %d ниже store.ExtendedSinceVersion %d", ProcessingVersion, store.ExtendedSinceVersion)
 	}
 }

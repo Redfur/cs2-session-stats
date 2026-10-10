@@ -23,7 +23,9 @@ import (
 // они считаются из счётчиков при чтении.
 //
 // Версия 2: вместе с результатом сохраняются личные дуэли (store.DuelsSinceVersion).
-const ProcessingVersion = 2
+// Версия 3: расширенная статистика — размены, клатчи, оружие, гранаты, хронология раундов
+// (store.ExtendedSinceVersion).
+const ProcessingVersion = 3
 
 // DemoOpener открывает сохранённую демку по sha256.
 type DemoOpener interface {
@@ -128,6 +130,7 @@ func (w *Worker) process(ctx context.Context, m store.Match) (err error) {
 	if err != nil {
 		return err
 	}
+	ext := stats.ComputeExt(match)
 	return w.store.SaveMatchResult(ctx, m.ID, store.MatchResult{
 		Map:     match.Map,
 		Rounds:  len(match.Rounds),
@@ -135,5 +138,6 @@ func (w *Worker) process(ctx context.Context, m store.Match) (err error) {
 		ScoreB:  match.ScoreB,
 		Players: stats.Compute(match),
 		Duels:   stats.Duels(match),
+		Ext:     &ext,
 	}, ProcessingVersion)
 }

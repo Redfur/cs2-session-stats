@@ -53,6 +53,11 @@ func (s *Server) Handler(static http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/matches/{id}/duels", s.getMatchDuels)
 	mux.HandleFunc("GET /api/sessions/{id}/duels", s.getSessionDuels)
 	mux.HandleFunc("GET /api/players/{steamId}/duels", s.getPlayerDuels)
+	mux.HandleFunc("GET /api/players/{steamId}/fight", s.getPlayerFight)
+	mux.HandleFunc("GET /api/players/{steamId}/weapons", s.getPlayerWeapons)
+	mux.HandleFunc("GET /api/players/{steamId}/utility", s.getPlayerUtility)
+	mux.HandleFunc("GET /api/matches/{id}/ext", s.getMatchExt)
+	mux.HandleFunc("GET /api/sessions/{id}/ext", s.getSessionExt)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "неизвестный метод API")
 	})

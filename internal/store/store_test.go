@@ -29,10 +29,11 @@ func TestMigrationsIdempotent(t *testing.T) {
 		if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 			t.Fatal(err)
 		}
-		if version != 4 {
-			t.Fatalf("user_version = %d, ожидалось 4", version)
+		if version != 5 {
+			t.Fatalf("user_version = %d, ожидалось 5", version)
 		}
-		for _, table := range []string{"sessions", "matches", "match_players", "match_duels", "imports"} {
+		for _, table := range []string{"sessions", "matches", "match_players", "match_duels", "imports",
+			"match_player_ext", "match_player_weapons", "match_rounds", "match_kills", "match_clutches"} {
 			var n int
 			if err := s.db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&n); err != nil || n != 1 {
 				t.Fatalf("таблица %s не создана (err=%v)", table, err)
@@ -148,5 +149,43 @@ func TestMigration004Backfill(t *testing.T) {
 	m, err := s.FindMatchBySHA(t.Context(), "old")
 	if err != nil || m.Ordinal != 1 || !m.HasResult {
 		t.Fatalf("старый матч читается неверно: %+v, %v", m, err)
+	}
+}
+
+// БД версии 4 схемы мигрирует: старые матчи читаются как раньше, расширенных данных у них нет.
+func TestMigration005Backfill(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	raw, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"001_init.sql", "002_reprocessing.sql", "003_duels.sql", "004_imports.sql"} {
+		body, _ := migrationsFS.ReadFile("migrations/" + name)
+		if _, err := raw.Exec(string(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw.Exec("PRAGMA user_version = 4")
+	raw.Exec("INSERT INTO sessions (id, date, created_at) VALUES (1, '2026-10-08', 'x')")
+	raw.Exec("INSERT INTO matches (id, session_id, ordinal, sha256, original_name, status, created_at, has_result, processed_version, result_version) VALUES (1, 1, 1, 'old', 'f.dem', 'done', 'x', 1, 2, 2)")
+	raw.Exec("INSERT INTO match_players (match_id, steam_id, name, team, result, rounds, kills, deaths, assists, hs_kills, damage, kast_rounds, k1, k2, k3, k4, k5, opening_kills, opening_deaths) VALUES (1, 7, 'p', 'A', 'win', 13, 10, 5, 3, 4, 900, 10, 0, 0, 0, 0, 0, 0, 0)")
+	raw.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	m, err := s.FindMatchBySHA(t.Context(), "old")
+	if err != nil || !m.HasResult {
+		t.Fatalf("старый матч читается неверно: %+v, %v", m, err)
+	}
+	e, err := s.GetMatchExt(t.Context(), m.ID)
+	if err != nil || e.Covered {
+		t.Fatalf("у старого матча расширенные данные посчитаны: %+v, %v", e, err)
+	}
+	rows, err := s.PlayerExtRows(t.Context(), 7, MatchFilter{})
+	if err != nil || len(rows) != 1 || rows[0].Covered || rows[0].Kills != 10 || rows[0].Assists != 3 {
+		t.Fatalf("строка старого матча: %+v, %v", rows, err)
 	}
 }

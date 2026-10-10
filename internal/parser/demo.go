@@ -52,8 +52,16 @@ func Parse(r io.Reader) (m Match, err error) {
 			b.cur = -1 // матч окончен: события после него (например, суициды) не учитываем
 		}
 	})
+	p.RegisterEventHandler(func(events.RoundFreezetimeEnd) { b.freezeEnd() })
 	p.RegisterEventHandler(b.onKill)
 	p.RegisterEventHandler(b.onHurt)
+	p.RegisterEventHandler(b.onFire)
+	p.RegisterEventHandler(b.onThrow)
+	p.RegisterEventHandler(b.onFlash)
+	p.RegisterEventHandler(func(e events.BombPlantBegin) { b.onBomb(BombPlantBegin, e.Player) })
+	p.RegisterEventHandler(func(e events.BombPlanted) { b.onBomb(BombPlanted, e.Player) })
+	p.RegisterEventHandler(func(e events.BombDefuseStart) { b.onBomb(BombDefuseBegin, e.Player) })
+	p.RegisterEventHandler(func(e events.BombDefused) { b.onBomb(BombDefused, e.Player) })
 	p.RegisterEventHandler(b.onRoundEnd)
 
 	if err := p.ParseToEnd(); err != nil && !errors.Is(err, dem.ErrUnexpectedEndOfDemo) {
@@ -119,7 +127,12 @@ func (b *builder) roundStart() {
 			b.sideA = common.TeamTerrorists
 		}
 	}
-	b.rounds = append(b.rounds, Round{Number: len(b.rounds) + 1})
+	side := SideCT
+	if b.sideA == common.TeamTerrorists {
+		side = SideT
+	}
+	// номер раунда по данным игры: при записи не с начала матча первый раунд больше 1
+	b.rounds = append(b.rounds, Round{Number: gs.TotalRoundsPlayed() + 1, SideA: side})
 	b.cur = len(b.rounds) - 1
 	for _, pl := range playing {
 		b.id(pl)
@@ -169,15 +182,29 @@ func (b *builder) id(pl *common.Player) uint64 {
 	return sid
 }
 
+// freezeEnd отмечает начало активной части раунда.
+func (b *builder) freezeEnd() {
+	if b.cur >= 0 && b.rounds[b.cur].Start == 0 {
+		b.rounds[b.cur].Start = b.p.CurrentTime()
+	}
+}
+
 func (b *builder) onKill(e events.Kill) {
 	if b.cur < 0 {
 		return
 	}
 	k := Kill{
-		Time:     b.p.CurrentTime(),
-		Killer:   b.id(e.Killer),
-		Victim:   b.id(e.Victim),
-		Headshot: e.IsHeadshot,
+		Time:          b.p.CurrentTime(),
+		Killer:        b.id(e.Killer),
+		Victim:        b.id(e.Victim),
+		Headshot:      e.IsHeadshot,
+		Weapon:        WeaponCode(e.Weapon, ""),
+		FlashAssist:   e.AssistedFlash,
+		ThroughSmoke:  e.ThroughSmoke,
+		Penetrated:    e.PenetratedObjects,
+		NoScope:       e.NoScope,
+		AttackerBlind: e.AttackerBlind,
+		Distance:      float64(e.Distance),
 	}
 	k.Assister = b.id(e.Assister) // включая флеш-ассисты, как в табло CS2 и FastCup
 	if k.Victim == 0 {
@@ -190,11 +217,64 @@ func (b *builder) onHurt(e events.PlayerHurt) {
 	if b.cur < 0 || e.HealthDamageTaken <= 0 {
 		return
 	}
-	d := Damage{Attacker: b.id(e.Attacker), Victim: b.id(e.Player), Amount: e.HealthDamageTaken}
+	d := Damage{
+		Attacker: b.id(e.Attacker),
+		Victim:   b.id(e.Player),
+		Amount:   e.HealthDamageTaken,
+		Weapon:   WeaponCode(e.Weapon, e.WeaponString),
+		Head:     e.HitGroup == events.HitGroupHead,
+	}
 	if d.Victim == 0 {
 		return
 	}
 	b.rounds[b.cur].Damages = append(b.rounds[b.cur].Damages, d)
+}
+
+func (b *builder) onFire(e events.WeaponFire) {
+	if b.cur < 0 {
+		return
+	}
+	if id := b.id(e.Shooter); id != 0 {
+		b.rounds[b.cur].Shots = append(b.rounds[b.cur].Shots, Shot{Shooter: id, Weapon: WeaponCode(e.Weapon, "")})
+	}
+}
+
+func (b *builder) onThrow(e events.GrenadeProjectileThrow) {
+	if b.cur < 0 || e.Projectile == nil {
+		return
+	}
+	id := b.id(e.Projectile.Thrower)
+	if id == 0 {
+		return
+	}
+	b.rounds[b.cur].Throws = append(b.rounds[b.cur].Throws, Throw{
+		Thrower:    id,
+		Weapon:     WeaponCode(e.Projectile.WeaponInstance, ""),
+		Projectile: e.Projectile.UniqueID(),
+	})
+}
+
+func (b *builder) onFlash(e events.PlayerFlashed) {
+	if b.cur < 0 || e.Player == nil {
+		return
+	}
+	f := Flash{Attacker: b.id(e.Attacker), Victim: b.id(e.Player), Duration: e.FlashDuration()}
+	if e.Projectile != nil {
+		f.Projectile = e.Projectile.UniqueID()
+	}
+	if f.Victim == 0 {
+		return
+	}
+	b.rounds[b.cur].Flashes = append(b.rounds[b.cur].Flashes, f)
+}
+
+func (b *builder) onBomb(a BombAction, pl *common.Player) {
+	if b.cur < 0 {
+		return
+	}
+	if id := b.id(pl); id != 0 {
+		b.rounds[b.cur].Bomb = append(b.rounds[b.cur].Bomb, BombEvent{Action: a, Player: id})
+	}
 }
 
 func (b *builder) onRoundEnd(e events.RoundEnd) {
@@ -203,9 +283,26 @@ func (b *builder) onRoundEnd(e events.RoundEnd) {
 	}
 	switch e.Winner {
 	case common.TeamCounterTerrorists, common.TeamTerrorists:
-		b.rounds[b.cur].Winner = b.teamOfSide(e.Winner)
+		r := &b.rounds[b.cur]
+		r.Winner = b.teamOfSide(e.Winner)
+		r.End = b.p.CurrentTime()
+		r.Reason = roundReason(e.Reason)
 	}
 	// раунд остаётся текущим до следующего RoundStart, чтобы учесть убийства после окончания раунда
+}
+
+func roundReason(r events.RoundEndReason) Reason {
+	switch r {
+	case events.RoundEndReasonCTWin, events.RoundEndReasonTerroristsWin:
+		return ReasonElimination
+	case events.RoundEndReasonTargetBombed:
+		return ReasonBomb
+	case events.RoundEndReasonBombDefused:
+		return ReasonDefuse
+	case events.RoundEndReasonTargetSaved:
+		return ReasonTime
+	}
+	return ReasonOther
 }
 
 func (b *builder) teamOfSide(side common.Team) Team {
@@ -238,14 +335,19 @@ func (b *builder) finish() (Match, error) {
 		case scoreB > bb:
 			b.rounds[n-1].Winner = TeamB
 		}
+		b.rounds[n-1].Restored = b.rounds[n-1].Winner != ""
 	}
 
 	m := Match{Map: b.mapName}
+	first := 1
 	for _, r := range b.rounds {
 		if r.Winner == "" {
 			continue // незавершённый раунд (запись оборвалась)
 		}
-		r.Number = len(m.Rounds) + 1
+		if len(m.Rounds) == 0 && r.Number > 1 {
+			first = r.Number // запись началась посреди матча
+		}
+		r.Number = first + len(m.Rounds)
 		m.Rounds = append(m.Rounds, r)
 		if r.Winner == TeamA {
 			m.ScoreA++
@@ -259,5 +361,23 @@ func (b *builder) finish() (Match, error) {
 	for _, sid := range b.order {
 		m.Players = append(m.Players, Player{SteamID: sid, Name: b.name[sid], Team: b.team[sid]})
 	}
+	m.HasDamageEvents, m.HasFlashEvents = observed(m.Rounds)
 	return m, nil
+}
+
+// observed определяет, есть ли в записи события урона и ослепления. Если урона не могло
+// быть (нет убийств игроками) или флешек не бросали, отсутствие событий — достоверный ноль.
+func observed(rounds []Round) (damage, flash bool) {
+	var hurt, kills, flashed, flashThrows bool
+	for _, r := range rounds {
+		hurt = hurt || len(r.Damages) > 0
+		flashed = flashed || len(r.Flashes) > 0
+		for _, k := range r.Kills {
+			kills = kills || k.Killer != 0
+		}
+		for _, t := range r.Throws {
+			flashThrows = flashThrows || t.Weapon == WeaponFlash
+		}
+	}
+	return hurt || !kills, flashed || !flashThrows
 }

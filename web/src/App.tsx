@@ -16,6 +16,7 @@ export default function App() {
         <Route path="/matches/:id" element={<MatchPage />} />
         <Route path="/players" element={<PlayersPage />} />
         <Route path="/players/:steamId" element={<PlayerPage />} />
+        <Route path="/players/:steamId/:tab" element={<PlayerPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Layout>

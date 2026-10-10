@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { Link, useParams, useSearchParams } from 'react-router'
 import { api, sessionTitle, type PlayerProfile, type ProfileMap, type ProfileMatch, type ProfileSession } from '../api'
 import { RivalsCard } from '../components/Duels'
+import { FightTab, UtilityTab, WeaponsTab } from '../components/PlayerExtTabs'
 import { PageError, PageLoading } from '../components/PageState'
 import { PeriodBar } from '../components/PeriodFilter'
 import { PLAYER_TOTAL_COLUMNS, PLAYER_TOTAL_MIN_WIDTH, RATING_DESC } from '../components/playerColumns'
@@ -12,15 +13,25 @@ import { Card, CardBody, CardHeader } from '../components/ui/Card'
 import { Page } from '../components/ui/Layout'
 import { MetaItem, PageHeader } from '../components/ui/PageHeader'
 import { Score } from '../components/ui/Score'
+import { Tabs } from '../components/ui/Tabs'
 import { rowLinkClass, StatTable, type Column } from '../components/ui/StatTable'
 import { StatTile } from '../components/ui/StatTile'
 import { formatDateLong, formatDateShort, plural } from '../format'
 import { formatMetric, formatPct } from '../metrics'
 import { usePeriod, useSessionList } from '../period'
 import { sortRows, useSort, type SortState } from '../sort'
+import { NotFoundPage } from './NotFoundPage'
 
-// Параметры сортировки разбивок профиля в адресе страницы.
-const SORT_PARAMS = ['ss', 'sm', 'sx']
+// Параметры периода в адресе страницы: переносятся между вкладками профиля и уходят в запросы.
+const PERIOD_PARAMS = ['from', 'to', 'session', 'period']
+
+// Вкладки профиля с собственными адресами; «Обзор» — без суффикса.
+const TABS = [
+  { tab: undefined, path: '', label: 'Обзор' },
+  { tab: 'fight', path: '/fight', label: 'Бой' },
+  { tab: 'weapons', path: '/weapons', label: 'Оружие' },
+  { tab: 'utility', path: '/utility', label: 'Гранаты и бомба' },
+]
 
 const mp = { key: 'm', label: 'М', title: 'Матчи', numeric: true, secondary: true, width: 36 } as const
 const wp = { key: 'w', label: 'П', title: 'Победы', numeric: true, secondary: true, width: 36 } as const
@@ -130,7 +141,7 @@ const MATCH_COLUMNS: Column<ProfileMatch>[] = [
 const MATCHES_DEFAULT: SortState = { key: 'n', dir: 'desc' }
 
 export function PlayerPage() {
-  const { steamId = '' } = useParams()
+  const { steamId = '', tab } = useParams()
   const [params, setParams] = useSearchParams()
   const [data, setData] = useState<PlayerProfile | null>(null)
   const [error, setError] = useState('')
@@ -140,10 +151,10 @@ export function PlayerPage() {
   const sm = useSort('sm', MAP_COLUMNS, RATING_DESC)
   const sx = useSort('sx', MATCH_COLUMNS, MATCHES_DEFAULT)
 
-  // в запрос идёт только период: сортировки разбивок остаются на клиенте
+  // в запрос идёт только период: сортировки таблиц остаются на клиенте
   const query = useMemo(() => {
-    const q = new URLSearchParams(params)
-    for (const k of SORT_PARAMS) q.delete(k)
+    const q = new URLSearchParams()
+    for (const k of PERIOD_PARAMS) for (const v of params.getAll(k)) q.append(k, v)
     return q.toString()
   }, [params])
 
@@ -164,6 +175,7 @@ export function PlayerPage() {
 
   useEffect(load, [load])
 
+  if (!TABS.some((t) => t.tab === tab)) return <NotFoundPage />
   if (error && !data)
     return <PageError title="Не удалось открыть профиль игрока" error={error} onRetry={load} back={{ to: '/players', label: 'Все игроки' }} />
   if (!data) return <PageLoading />
@@ -220,6 +232,37 @@ export function PlayerPage() {
         />
       </div>
 
+      <Tabs
+        label="Разделы профиля"
+        items={TABS.map((t) => ({
+          to: `/players/${steamId}${t.path}${query ? `?${query}` : ''}`,
+          label: t.label,
+          end: t.tab === undefined,
+        }))}
+      />
+
+      {tab === 'fight' && <FightTab steamId={steamId} query={query} sessions={sessions} />}
+      {tab === 'weapons' && <WeaponsTab steamId={steamId} query={query} sessions={sessions} />}
+      {tab === 'utility' && <UtilityTab steamId={steamId} query={query} sessions={sessions} />}
+      {tab === undefined && <Overview data={data} steamId={steamId} query={query} ss={ss} sm={sm} sx={sx} />}
+    </Page>
+  )
+}
+
+interface OverviewProps {
+  data: PlayerProfile
+  steamId: string
+  query: string
+  ss: { sort: SortState; toggle: (key: string) => void }
+  sm: { sort: SortState; toggle: (key: string) => void }
+  sx: { sort: SortState; toggle: (key: string) => void }
+}
+
+// Overview — вкладка «Обзор»: итоги, разбивки, соперники и матчи.
+function Overview({ data, steamId, query, ss, sm, sx }: OverviewProps) {
+  const t = data.totals
+  return (
+    <>
       <Card aria-labelledby="sum-h">
         <CardHeader title="Итоги" titleId="sum-h" note="все колонки за выбранный период" />
         <StatTable
@@ -257,7 +300,7 @@ export function PlayerPage() {
         minWidth={780}
         aside={<span className="text-small text-fg-muted">Счёт — со стороны игрока: его команда слева</span>}
       />
-    </Page>
+    </>
   )
 }
 

@@ -212,6 +212,189 @@ export interface UploadResult {
   error?: string
 }
 
+// ── Расширенная статистика из демок ──
+
+export type ExtStatus = 'no_matches' | 'unavailable' | 'partial' | 'complete'
+// почему у матча нет значения: старая версия обработки, нет событий урона или ослепления
+export type MissingReason = 'old' | 'no_damage' | 'no_flash'
+
+export interface MissingMatch {
+  id: number
+  sessionId: number
+  ordinal: number
+  map: string
+  reason: MissingReason
+}
+
+// Значение с покрытием: по скольким матчам выборки посчитано. value = null — не посчитано или нет знаменателя.
+export interface ExtMetric {
+  value: number | null
+  covered: number
+  total: number
+  missing: MissingMatch[]
+}
+
+export interface MatchRef {
+  id: number
+  sessionId: number
+  ordinal: number
+  error?: string
+}
+
+export interface ExtHeader {
+  status: ExtStatus
+  eligibleMatches: number
+  coveredMatches: number
+  uncoveredMatches: MissingMatch[]
+  reparsing: MatchRef[]
+  failed: MatchRef[]
+}
+
+export interface ClutchRow {
+  vs: number
+  attempts: number
+  wins: number
+  losses: number
+  draws: number
+  unknown: number
+  winRate: number | null // 0..1
+}
+
+export interface SurvivalRow {
+  side: 'T' | 'CT' | 'total'
+  rounds: number
+  survived: number
+  share: number | null
+  avgAliveSec: number | null
+}
+
+export interface PlayerFight extends ExtHeader {
+  trades: ExtMetric & { tradedDeaths: number; deaths: number; tradeKills: number; kills: number }
+  damage: ExtMetric & { dealtPerRound: number | null; takenPerRound: number | null; diffPerRound: number | null; rounds: number }
+  clutches: ExtMetric & { rows: ClutchRow[]; sum: ClutchRow }
+  survival: ExtMetric & { rows: SurvivalRow[] }
+  assists: { flash: number; damage: number; unknown: number; total: number }
+}
+
+export interface WeaponRow {
+  steamId?: string
+  weapon: string
+  kills: number
+  hsKills: number
+  hsKillsPct: number | null
+  damage: number
+  shots: number
+  hits: number
+  hsHits: number
+  hsHitsPct: number | null
+}
+
+export interface PlayerWeapons extends ExtHeader {
+  weapons: ExtMetric & { damage: ExtMetric; rows: WeaponRow[] }
+  grenadeKills: number
+  killDetails: ExtMetric & {
+    kills: number
+    smoke: number
+    wallbang: number
+    noScope: number
+    blind: number
+    avgDistance: number | null
+  }
+}
+
+export interface GrenadeMap {
+  map: string
+  matches: number
+  he: ExtMetric
+  fire: ExtMetric
+  flashed: ExtMetric
+  smokes: ExtMetric
+  kills: ExtMetric
+}
+
+export interface PlayerUtility extends ExtHeader {
+  grenades: {
+    he: ExtMetric
+    fire: ExtMetric
+    flashed: ExtMetric
+    smokes: ExtMetric
+    grenadeKills: ExtMetric & { count: number; he: number; fire: number }
+  }
+  byMap: GrenadeMap[]
+  bomb: ExtMetric & {
+    plants: number
+    plantStarts: number
+    plantsAborted: number
+    defuses: number
+    defuseStarts: number
+    defusesAborted: number
+  }
+}
+
+// Подробные колонки игрока в матче или сессии.
+export interface DetailRow {
+  steamId: string
+  matches: number
+  takenPerRound: number | null
+  diffPerRound: number | null
+  tradeKills: number
+  tradedDeaths: number
+  clutchWins: number
+  clutchAttempts: number
+  flashAssists: number
+  flashed: number | null
+  heDamage: number | null
+  fireDamage: number | null
+  grenadeDamage: number | null
+  smokes: number | null
+  survivedPct: number | null
+}
+
+export type Side = 'CT' | 'T'
+export type RoundReason = 'elimination' | 'bomb' | 'defuse' | 'time' | 'other' | ''
+
+export interface RoundKill {
+  timeSec: number | null
+  killerId: string
+  victimId: string
+  weapon: string
+  headshot: boolean
+  trade: boolean
+  throughSmoke: boolean
+  wallbang: boolean
+  noScope: boolean
+  attackerBlind: boolean
+}
+
+export interface Round {
+  number: number
+  winner: 'A' | 'B'
+  sideA: Side
+  reason: RoundReason
+  durationSec: number | null
+  restored: boolean
+  scoreA: number
+  scoreB: number
+  clutches: { steamId: string; vs: number; outcome: 'win' | 'loss' | 'draw' | 'unknown' }[]
+  kills: RoundKill[]
+  // кто дожил до конца раунда; нет у восстановленного раунда
+  alive?: { A: string[]; B: string[] }
+}
+
+export interface MatchExt {
+  status: 'complete' | 'unavailable'
+  quality: { firstRound: number; restoredRound: boolean; noDamageEvents: boolean; noFlashEvents: boolean }
+  durationSec: number | null
+  extRounds: number
+  rounds: Round[]
+  players: DetailRow[]
+  weapons: WeaponRow[]
+}
+
+export interface SessionExt extends ExtHeader {
+  players: DetailRow[]
+}
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const resp = await fetch(url, {
     method,
@@ -247,6 +430,11 @@ export const api = {
   getMatchDuels: (id: string | number) => request<MatchDuels>('GET', `/api/matches/${id}/duels`),
   getSessionDuels: (id: string | number) => request<SessionDuels>('GET', `/api/sessions/${id}/duels`),
   getPlayerDuels: (steamId: string, query: string) => request<PlayerDuels>('GET', `/api/players/${steamId}/duels?${query}`),
+  getPlayerFight: (steamId: string, query: string) => request<PlayerFight>('GET', `/api/players/${steamId}/fight?${query}`),
+  getPlayerWeapons: (steamId: string, query: string) => request<PlayerWeapons>('GET', `/api/players/${steamId}/weapons?${query}`),
+  getPlayerUtility: (steamId: string, query: string) => request<PlayerUtility>('GET', `/api/players/${steamId}/utility?${query}`),
+  getMatchExt: (id: string | number) => request<MatchExt>('GET', `/api/matches/${id}/ext`),
+  getSessionExt: (id: string | number) => request<SessionExt>('GET', `/api/sessions/${id}/ext`),
   // text — ввод поля как есть: ссылки через пробел или перевод строки
   addImports: (sessionId: string, text: string) =>
     request<ImportAddResult[]>('POST', `/api/sessions/${sessionId}/imports`, { text }),

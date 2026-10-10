@@ -1,25 +1,41 @@
 import { ChevronLeft, ChevronRight, LoaderCircle, RefreshCw, Trash } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
-import { api, isProcessing, sessionTitle, type MatchDetails, type PlayerRow, type SessionDetails } from '../api'
+import { Swords } from 'lucide-react'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
+import { api, isProcessing, sessionTitle, type MatchDetails, type MatchExt, type PlayerRow, type SessionDetails, type Side } from '../api'
+import { detailColumns, joinDetails, type DetailPlayer } from '../components/detailColumns'
 import { MatchDuelsCard } from '../components/Duels'
+import { useExtLoad } from '../ext'
+import { MatchQualityAlert, MatchRounds, MatchWeaponsCard, TeamSides } from '../components/MatchExt'
+import { isIncomplete, matchDuration } from '../rounds'
 import { PageError, PageLoading } from '../components/PageState'
 import { PLAYER_MATCH_COLUMNS, PLAYER_MATCH_MIN_WIDTH, RATING_DESC } from '../components/playerColumns'
 import { Alert } from '../components/ui/Alert'
-import { OutcomeBadge, StatusBadge } from '../components/ui/Badge'
+import { Badge, OutcomeBadge, StatusBadge } from '../components/ui/Badge'
 import { Button, ButtonLink } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { cx } from '../components/ui/cx'
 import { ConfirmDialog } from '../components/ui/Dialog'
+import { EmptyState } from '../components/ui/EmptyState'
 import { Page } from '../components/ui/Layout'
 import { MetaItem, PageHeader } from '../components/ui/PageHeader'
 import { TeamName } from '../components/ui/Score'
 import { ScoreBoard } from '../components/ui/ScoreBoard'
-import { StatTable } from '../components/ui/StatTable'
+import { Segment } from '../components/ui/Segment'
+import { StatTable, type Column } from '../components/ui/StatTable'
 import { plural } from '../format'
 import { sortRows, useSort, type SortState } from '../sort'
 
 const POLL_MS = 3000
+
+const DETAIL_COLUMNS = detailColumns('match', {
+  old: 'Матч обработан старой версией — пересчитайте его',
+  noDamage: 'В демке нет событий урона — не посчитано',
+  noFlash: 'В демке нет событий ослепления — не посчитано',
+})
+const ADR_DESC: SortState = { key: 'adr', dir: 'desc' }
+
+type View = 'basic' | 'detail'
 
 export function MatchPage() {
   const { id = '' } = useParams()
@@ -57,6 +73,25 @@ export function MatchPage() {
   }, [processing, load])
 
   const { sort, toggle } = useSort('sort', PLAYER_MATCH_COLUMNS, RATING_DESC)
+  const detailSort = useSort('sort', DETAIL_COLUMNS, ADR_DESC)
+  const [params, setParams] = useSearchParams()
+  const view: View = params.get('view') === 'detail' ? 'detail' : 'basic'
+  const setView = (v: View) =>
+    setParams(
+      (prev) => {
+        const p = new URLSearchParams(prev)
+        if (v === 'detail') p.set('view', 'detail')
+        else p.delete('view')
+        p.delete('sort') // у видов разные колонки
+        return p
+      },
+      { replace: true },
+    )
+
+  // меняется вместе со статусом матча: после пересчёта данные запрашиваются снова
+  const version = data ? `${data.match.status}|${data.match.processedVersion}|${data.match.parsedAt ?? ''}` : ''
+  const extLoad = useExtLoad<MatchExt>(() => api.getMatchExt(id), `${id}|${version}`)
+  const ext = extLoad.data?.status === 'complete' ? extLoad.data : null
 
   if (error && !data)
     return <PageError title="Не удалось открыть матч" error={error} onRetry={load} back={{ to: '/', label: 'К списку сессий' }} />
@@ -112,6 +147,11 @@ export function MatchPage() {
         meta={
           <>
             <StatusBadge match={match} showError={false} />
+            {isIncomplete(ext, match) && (
+              <span title="Запись демки неполная — подробности под заголовком">
+                <Badge tone="neutral">Неполная запись</Badge>
+              </span>
+            )}
             <MetaItem className="min-w-0 overflow-hidden font-mono text-small text-ellipsis">{match.originalName}</MetaItem>
           </>
         }
@@ -154,15 +194,68 @@ export function MatchPage() {
           </Alert>
         ))}
 
+      {ext && <MatchQualityAlert ext={ext} match={match} />}
+
       {match.hasResult && (
         <>
           <ScoreBoard
             scoreA={match.scoreA}
             scoreB={match.scoreB}
-            footer={`${plural(match.rounds, ['раунд', 'раунда', 'раундов'])} · Команда A начала матч за CT`}
-          />
-          <TeamCard team="A" own={match.scoreA} other={match.scoreB} players={players} sort={sort} onSort={toggle} />
-          <TeamCard team="B" own={match.scoreB} other={match.scoreA} players={players} sort={sort} onSort={toggle} />
+            duration={matchDuration(ext)}
+            footer={ext ? undefined : `${plural(match.rounds, ['раунд', 'раунда', 'раундов'])} · Команда A начала матч за CT`}
+          >
+            {ext && <MatchRounds ext={ext} players={players} />}
+          </ScoreBoard>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Segment
+              label="Вид таблиц команд"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'basic', label: 'Основное' },
+                { value: 'detail', label: 'Подробно' },
+              ]}
+            />
+            <span className="text-small text-fg-muted">
+              {view === 'basic'
+                ? 'K, D, A, ADR, KAST и рейтинг'
+                : ext?.quality.restoredRound
+                  ? `Подробно — по ${ext.extRounds} раундам из ${match.rounds}: последний раунд восстановлен из счёта`
+                  : 'Размены, клатчи, урон гранат, полученный урон и выживание'}
+            </span>
+          </div>
+
+          {view === 'detail' && extLoad.data && !ext ? (
+            <Card as="div">
+              <EmptyState
+                icon={<Swords />}
+                as="h2"
+                title="Подробная статистика ещё не посчитана"
+                text="Матч обработан до появления подробной статистики. Пересчитайте его — счёт и основные показатели не изменятся."
+                actions={
+                  <Button size="sm" loading={processing} onClick={() => setConfirm('reparse')}>
+                    {processing ? 'Пересчитываем…' : 'Пересчитать матч'}
+                  </Button>
+                }
+              />
+            </Card>
+          ) : (
+            (['A', 'B'] as const).map((team) => (
+              <TeamCard
+                key={team}
+                team={team}
+                own={team === 'A' ? match.scoreA : match.scoreB}
+                other={team === 'A' ? match.scoreB : match.scoreA}
+                players={players}
+                firstSide={ext && ext.rounds.length > 0 ? (team === 'A' ? ext.rounds[0].sideA : ext.rounds[0].sideA === 'CT' ? 'T' : 'CT') : undefined}
+                {...(view === 'detail'
+                  ? { detail: joinDetails(players, ext?.players), sort: detailSort.sort, onSort: detailSort.toggle }
+                  : { sort, onSort: toggle })}
+              />
+            ))
+          )}
+          {ext && <MatchWeaponsCard ext={ext} players={players} />}
           <MatchDuelsCard
             matchId={match.id}
             version={`${match.status}|${match.processedVersion}|${match.parsedAt ?? ''}`}
@@ -224,12 +317,16 @@ interface TeamCardProps {
   own: number
   other: number
   players: PlayerRow[]
+  // сторона команды в первой половине: в шапке видно CT → T
+  firstSide?: Side
+  // подробные строки игроков: таблица «Подробно»
+  detail?: DetailPlayer[]
   sort: SortState
   onSort: (key: string) => void
 }
 
 // TeamCard — шапка команды с исходом и суммами K·D·A и таблица её игроков.
-function TeamCard({ team, own, other, players, sort, onSort }: TeamCardProps) {
+function TeamCard({ team, own, other, players, firstSide, detail, sort, onSort }: TeamCardProps) {
   const rows = players.filter((p) => p.team === team)
   const sum = (f: (p: PlayerRow) => number) => rows.reduce((s, p) => s + f(p), 0)
   const headId = `team-${team}`
@@ -246,20 +343,37 @@ function TeamCard({ team, own, other, players, sort, onSort }: TeamCardProps) {
             <TeamName team={team} />
           </h2>
           <OutcomeBadge result={own > other ? 'win' : own < other ? 'loss' : 'draw'} />
+          {firstSide && <TeamSides first={firstSide} />}
         </div>
         <span className="text-small text-fg-muted tabular-nums">
           Всего K {sum((p) => p.kills)} · D {sum((p) => p.deaths)} · A {sum((p) => p.assists)}
         </span>
       </div>
-      <StatTable
-        columns={PLAYER_MATCH_COLUMNS}
-        rows={sortRows(rows, PLAYER_MATCH_COLUMNS, sort)}
-        rowKey={(p) => p.steamId}
-        sort={sort}
-        onSort={onSort}
-        labelledBy={headId}
-        minWidth={PLAYER_MATCH_MIN_WIDTH}
-      />
+      {detail ? (
+        <StatTable
+          columns={DETAIL_COLUMNS as Column<DetailPlayer>[]}
+          rows={sortRows(
+            detail.filter((p) => p.team === team),
+            DETAIL_COLUMNS,
+            sort,
+          )}
+          rowKey={(p) => p.steamId}
+          sort={sort}
+          onSort={onSort}
+          labelledBy={headId}
+          minWidth={1060}
+        />
+      ) : (
+        <StatTable
+          columns={PLAYER_MATCH_COLUMNS}
+          rows={sortRows(rows, PLAYER_MATCH_COLUMNS, sort)}
+          rowKey={(p) => p.steamId}
+          sort={sort}
+          onSort={onSort}
+          labelledBy={headId}
+          minWidth={PLAYER_MATCH_MIN_WIDTH}
+        />
+      )}
     </Card>
   )
 }
