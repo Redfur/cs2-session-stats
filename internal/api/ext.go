@@ -350,7 +350,7 @@ type weaponsResponse struct {
 		Wallbang    int      `json:"wallbang"`
 		NoScope     int      `json:"noScope"`
 		Blind       int      `json:"blind"`
-		AvgDistance *float64 `json:"avgDistance"` // единицы игры
+		AvgDistance *float64 `json:"avgDistance"` // метры
 	} `json:"killDetails"`
 }
 
@@ -378,7 +378,7 @@ func (s *Server) getPlayerWeapons(w http.ResponseWriter, r *http.Request) {
 	d.metric = coverage(rows, needExt)
 	d.Kills, d.Smoke, d.Wallbang, d.NoScope, d.Blind = kills, ext.SmokeKills, ext.WallbangKills, ext.NoScopeKills, ext.BlindKills
 	if ext.DistanceKills > 0 {
-		d.AvgDistance = ptr(math.Round(ext.DistanceSum / float64(ext.DistanceKills)))
+		d.AvgDistance = ptr(math.Round(10*ext.DistanceSum/float64(ext.DistanceKills)) / 10)
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

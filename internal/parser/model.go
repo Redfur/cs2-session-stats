@@ -58,7 +58,7 @@ type Kill struct {
 	Penetrated    int     // число пробитых препятствий; больше 0 — прострел
 	NoScope       bool    // без прицела
 	AttackerBlind bool    // убийца был ослеплён
-	Distance      float64 // дистанция в единицах игры
+	Distance      float64 // дистанция в метрах
 }
 
 // Damage — урон по здоровью, уже ограниченный оставшимся HP жертвы.

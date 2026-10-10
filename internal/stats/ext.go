@@ -40,7 +40,7 @@ type ExtCounters struct {
 	WallbangKills int     `json:"wallbangKills"`
 	NoScopeKills  int     `json:"noScopeKills"`
 	BlindKills    int     `json:"blindKills"`
-	DistanceSum   float64 `json:"distanceSum"` // единицы игры
+	DistanceSum   float64 `json:"distanceSum"` // метры
 	DistanceKills int     `json:"distanceKills"`
 
 	Plants       int `json:"plants"`
@@ -326,7 +326,8 @@ func ComputeExt(m parser.Match) Ext {
 			}
 		}
 		for _, s := range r.Shots {
-			if acc[s.Shooter] != nil && !parser.IsGrenade(s.Weapon) {
+			// броски гранат и взмахи ножом — не выстрелы
+			if acc[s.Shooter] != nil && !parser.IsGrenade(s.Weapon) && s.Weapon != "knife" {
 				weapon(s.Shooter, s.Weapon).Shots++
 			}
 		}

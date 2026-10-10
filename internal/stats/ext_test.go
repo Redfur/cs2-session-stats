@@ -126,7 +126,7 @@ func TestExtDamage(t *testing.T) {
 		{Attacker: 0, Victim: a1, Amount: 10},                  // мир
 	}
 	ak := parser.Shot{Shooter: a1, Weapon: "ak47"}
-	r.Shots = []parser.Shot{ak, ak, ak, {Shooter: a1, Weapon: parser.WeaponHE}}
+	r.Shots = []parser.Shot{ak, ak, ak, {Shooter: a1, Weapon: parser.WeaponHE}, {Shooter: a1, Weapon: "knife"}}
 	e, c := ext(r)
 	if c[a1].DamageDealt != 145 || c[a1].DamageTaken != 50 {
 		t.Errorf("a1 нанёс %d, получил %d; ожидалось 145 и 50", c[a1].DamageDealt, c[a1].DamageTaken)

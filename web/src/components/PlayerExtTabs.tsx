@@ -349,9 +349,9 @@ export function WeaponsTab({ steamId, query, sessions }: TabProps) {
                 <Kpi label="Сам ослеплён" value={k.blind} sub={share(k.blind)} />
                 <Kpi
                   label="Средняя дистанция"
-                  value={k.avgDistance == null ? <NotComputed reason="Нет убийств с известной дистанцией" /> : fmtInt(k.avgDistance)}
-                  of={k.avgDistance == null ? undefined : 'ед.'}
-                  sub="в единицах игры"
+                  value={k.avgDistance == null ? <NotComputed reason="Нет убийств с известной дистанцией" /> : fmt1(k.avgDistance)}
+                  of={k.avgDistance == null ? undefined : 'м'}
+                  sub="на одно убийство"
                 />
               </KpiGrid>
             </Card>
