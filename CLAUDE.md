@@ -55,11 +55,12 @@ internal/worker    очередь матчей; ProcessingVersion; пересч�
 internal/store     SQLite: sessions, matches, match_players, imports; миграции migrations/NNN_*.sql через PRAGMA user_version
 internal/api       JSON API на net/http ServeMux; PlayerView для вывода
 internal/webui     раздача SPA: embed при -tags embedweb, иначе с диска (STATIC_DIR)
-web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI + lucide-react; страницы /, /sessions/:id, /matches/:id, /players, /players/:id
+web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI + lucide-react; страницы /, /sessions/:id, /matches/:id, /players, /players/:id[/fight|weapons|utility]
   src/index.css      токены дизайна (@theme), шрифты Manrope и JetBrains Mono самохостом (@fontsource-variable)
   src/components/ui  компоненты дизайн-системы: каркас, кнопки, поля, бейджи, StatTable, диалоги, загрузка
   src/metrics.ts     шкала «плохо / средне / хорошо» для rating, K/D, ADR, KAST
   src/duels.ts       доля и ступень пары для матрицы дуэлей; блоки дуэлей — src/components/Duels.tsx
+  src/ext.ts         загрузка и тексты покрытия расширенной статистики; src/rounds.ts — раунды матча; src/weapons.ts — названия и иконки оружия (src/assets/weapons)
   src/sort.ts        сортировка таблиц в адресе (useSort); src/upload.ts — очередь загрузки демок
 ```
 
@@ -71,6 +72,7 @@ web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI 
 - **Сессию создаёт пользователь** (дата + название). В демках CS2 нет даты матча, поэтому группировать по времени нельзя. Порядок матчей (`ordinal`) — порядок загрузки файлов, а матчи из ссылок встают по времени игры у платформы.
 - **В БД хранятся только сырые счётчики** (`stats.Counters`). ADR, KAST%, HS%, K/D и rating считаются при чтении. Агрегаты сессии — суммы счётчиков, поэтому они автоматически взвешены по раундам. Rating — HLTV 1.0.
 - **`worker.ProcessingVersion`.** Поднимать при любом изменении `internal/parser`/`internal/stats`, которое меняет сохраняемые счётчики: при старте сервис сам пересчитает старые матчи. Для изменения формул производных показателей поднимать не нужно.
+- **Расширенная статистика** (размены, клатчи, оружие, гранаты, бомба, хронология раундов) — `stats.ComputeExt`, таблицы `match_player_ext`, `match_player_weapons`, `match_rounds`, `match_kills`, `match_clutches` (миграция 005), пишутся в той же транзакции, что результат. Посчитана, если `has_result = 1 AND result_version >= store.ExtendedSinceVersion` (3). Команды — команды матча, как у K; размены, клатчи и выживание — до `RoundEnd`; восстановленный из счёта раунд в расширенные счётчики не входит. Покрытие метрики зависит от `has_damage_events`/`has_flash_events` матча: непокрытое значение — «не посчитано», а не 0.
 - **Личные дуэли** хранятся в `match_duels` (все пары соперников, включая нули) и пишутся в той же транзакции, что результат. `matches.result_version` — версия, которой получен сохранённый результат (в отличие от `processed_version`, не меняется при ошибке). Дуэли матча посчитаны, если `has_result = 1 AND result_version >= store.DuelsSinceVersion`. Пары считаются тем же правилом `enemyKill`, что и K.
 - **Статус и наличие результата разделены.** `status` (`pending`/`parsing`/`done`/`failed`) описывает обработку, `has_result` — есть ли данные. При пересчёте и его ошибке прежний результат сохраняется и показывается: `FailMatch` не трогает `match_players`. Итоги сессии строятся по `has_result = 1`.
 - **Очередь** — таблица `matches`. `ClaimNextPending` идёт в порядке `has_result, id`, так что новые загрузки обрабатываются раньше пересчётов. При остановке сервиса матч остаётся `parsing`, при старте `ResetParsing` возвращает его в очередь, а не помечает `failed`.
@@ -119,6 +121,8 @@ web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI 
 - zsh не разбивает `$var` на слова: `cmd $args` передаёт один аргумент. Аргументы писать явно или использовать массивы.
 - `pkill -f <шаблон>` может убить собственный shell, если шаблон встречается в его командной строке.
 - Сборка Docker иногда виснет на `load metadata for docker.io/library/golang:...`. Помогает отдельный `docker pull golang:1.27-alpine`.
+- Имя цвета в `@theme` не должно совпадать с суффиксом утилиты: `--color-t` превращает `border-t` в цвет границы. Поэтому цвета сторон — `side-ct`/`side-t`.
+- Проверять типы фронта через `npx tsc -b --noEmit` (как `make test`): `tsc --noEmit -p .` на корневом tsconfig ничего не компилирует.
 - Tailwind v4 выкидывает токены `@theme`, которые не используются в классах. Цвета, которые берутся только через `var()` в inline-стилях (шкала дуэлей), объявлены в `@theme static`.
 - Обёртке таблицы с `overflow-x-auto` нужен `relative`: иначе `sr-only` (absolute) внутри неё растягивает всю страницу по горизонтали.
 - `npm ci` внутри `docker build` может падать с `ETIMEDOUT` из-за сети WSL/Docker при многих параллельных загрузках. Для локальной проверки помогает копия Dockerfile с `ENV npm_config_maxsockets=2` перед `npm ci`.
