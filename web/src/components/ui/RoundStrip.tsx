@@ -43,14 +43,16 @@ export function RoundStrip({ rounds, selected, onPick }: RoundStripProps) {
     <div
       role="group"
       aria-label="Раунды матча: сверху выигранные командой A, снизу — командой B"
-      className="flex flex-wrap gap-x-0 gap-y-3.5 px-4 py-3.5 [--rc:22px] [--rs:28px] md:gap-y-4 md:px-5 md:pt-[18px] md:pb-4 md:[--rc:36px] md:[--rs:32px]"
+      className="overflow-hidden px-4 py-3.5 [--rc:22px] [--rs:28px] md:px-5 md:pt-[18px] md:pb-4 md:[--rc:36px] md:[--rs:32px]"
     >
+      {/* разделитель стоит слева у каждой группы; сдвиг прячет его в начале каждой строки при переносе */}
+      <div className="flex flex-wrap gap-x-0 gap-y-3.5 md:-ml-[21px] md:gap-y-4">
       {groups.map((g) => {
         const sideA = g[0].sideA
         return (
           <div
             key={g[0].number}
-            className="flex flex-col gap-2 md:border-l md:border-border md:px-5 md:first:border-l-0 md:first:pl-0"
+            className="flex flex-col gap-2 md:border-l md:border-border md:px-5"
           >
             <div className="flex items-baseline gap-2 text-over font-bold whitespace-nowrap text-fg-muted uppercase">
               {groupTitle(groupOf(g[0].number), g[0].number, g[g.length - 1].number)}
@@ -74,6 +76,7 @@ export function RoundStrip({ rounds, selected, onPick }: RoundStripProps) {
           </div>
         )
       })}
+      </div>
     </div>
   )
 }
