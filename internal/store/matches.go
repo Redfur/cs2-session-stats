@@ -48,6 +48,7 @@ type MatchResult struct {
 	ScoreB  int
 	Players []stats.PlayerStats
 	Duels   []stats.Duel // все пары соперников матча, включая нули
+	Ext     *stats.Ext   // расширенная статистика; nil — не считалась
 }
 
 // DuplicateError — демка с таким sha256 уже есть в системе.
@@ -251,6 +252,9 @@ func (s *Store) SaveMatchResult(ctx context.Context, matchID int64, r MatchResul
 		if err != nil {
 			return fmt.Errorf("дуэль %d→%d: %w", d.Killer, d.Victim, err)
 		}
+	}
+	if err := saveExt(ctx, tx, matchID, r.Ext); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
