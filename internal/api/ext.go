@@ -103,20 +103,41 @@ func sumExt(rows []store.ExtRow) (c stats.ExtCounters, kills, deaths, assists in
 	return
 }
 
-// extHeader — общая часть ответов: статус и матчи выборки без расширенных данных.
+type matchRef struct {
+	ID        int64  `json:"id"`
+	SessionID int64  `json:"sessionId"`
+	Ordinal   int    `json:"ordinal"`
+	Error     string `json:"error,omitempty"`
+}
+
+// extHeader — общая часть ответов: статус, матчи выборки без расширенных данных,
+// пересчитываемые матчи и матчи с ошибкой последнего пересчёта.
 type extHeader struct {
 	Status           string         `json:"status"`
 	EligibleMatches  int            `json:"eligibleMatches"`
 	CoveredMatches   int            `json:"coveredMatches"`
 	UncoveredMatches []missingMatch `json:"uncoveredMatches"`
+	Reparsing        []matchRef     `json:"reparsing"`
+	Failed           []matchRef     `json:"failed"`
 }
 
 func newExtHeader(rows []store.ExtRow) extHeader {
 	covered, missing := split(rows, needExt)
-	return extHeader{
+	h := extHeader{
 		Status: duelsStatus(len(rows), len(covered)), EligibleMatches: len(rows), CoveredMatches: len(covered),
-		UncoveredMatches: missing,
+		UncoveredMatches: missing, Reparsing: []matchRef{}, Failed: []matchRef{},
 	}
+	for _, r := range rows {
+		ref := matchRef{ID: r.MatchID, SessionID: r.SessionID, Ordinal: r.Ordinal}
+		switch r.Status {
+		case store.StatusPending, store.StatusParsing:
+			h.Reparsing = append(h.Reparsing, ref)
+		case store.StatusFailed:
+			ref.Error = r.Error
+			h.Failed = append(h.Failed, ref)
+		}
+	}
+	return h
 }
 
 // playerExtRows разбирает запрос вкладки профиля. ok=false — ответ уже записан.
@@ -212,8 +233,8 @@ type fightResponse struct {
 	} `json:"damage"`
 	Clutches struct {
 		metric
-		Rows  []clutchRow `json:"rows"`
-		Total clutchRow   `json:"total"`
+		Rows []clutchRow `json:"rows"`
+		Sum  clutchRow   `json:"sum"` // строка «Всего»
 	} `json:"clutches"`
 	Survival struct {
 		metric
@@ -262,13 +283,13 @@ func (s *Server) getPlayerFight(w http.ResponseWriter, r *http.Request) {
 	for _, c := range clutches {
 		if c.Vs >= 1 && c.Vs <= 5 {
 			byVs[c.Vs-1].add(c.Outcome, c.Count)
-			resp.Clutches.Total.add(c.Outcome, c.Count)
+			resp.Clutches.Sum.add(c.Outcome, c.Count)
 		}
 	}
 	for i := range byVs {
 		byVs[i].finish()
 	}
-	resp.Clutches.Total.finish()
+	resp.Clutches.Sum.finish()
 	resp.Clutches.Rows = byVs
 
 	resp.Survival.metric = coverage(rows, needExt)
@@ -291,10 +312,12 @@ type weaponView struct {
 	SteamID    string   `json:"steamId,omitempty"`
 	Weapon     string   `json:"weapon"`
 	Kills      int      `json:"kills"`
+	HSKills    int      `json:"hsKills"`
 	HSKillsPct *float64 `json:"hsKillsPct"`
 	Damage     int      `json:"damage"`
 	Shots      int      `json:"shots"`
 	Hits       int      `json:"hits"`
+	HSHits     int      `json:"hsHits"`
 	HSHitsPct  *float64 `json:"hsHitsPct"`
 }
 
@@ -307,8 +330,8 @@ func pct(num, den int) *float64 {
 
 func newWeaponView(w store.WeaponTotal) weaponView {
 	return weaponView{
-		Weapon: w.Weapon, Kills: w.Kills, HSKillsPct: pct(w.HSKills, w.Kills),
-		Damage: w.Damage, Shots: w.Shots, Hits: w.Hits, HSHitsPct: pct(w.HSHits, w.Hits),
+		Weapon: w.Weapon, Kills: w.Kills, HSKills: w.HSKills, HSKillsPct: pct(w.HSKills, w.Kills),
+		Damage: w.Damage, Shots: w.Shots, Hits: w.Hits, HSHits: w.HSHits, HSHitsPct: pct(w.HSHits, w.Hits),
 	}
 }
 
@@ -369,6 +392,21 @@ type grenadeMap struct {
 	Fire    metric `json:"fire"`
 	Flashed metric `json:"flashed"`
 	Smokes  metric `json:"smokes"`
+	Kills   metric `json:"kills"` // убийства HE и огнём за период, сумма
+}
+
+// sumMetric — сумма значения по покрытым матчам.
+func sumMetric(rows []store.ExtRow, n need, value func(stats.ExtCounters) int) metric {
+	covered, missing := split(rows, n)
+	m := metric{Covered: len(covered), Total: len(rows), Missing: missing}
+	if len(covered) > 0 {
+		var sum int
+		for _, r := range covered {
+			sum += value(r.Ext)
+		}
+		m.Value = ptr(float64(sum))
+	}
+	return m
 }
 
 func grenadeMetrics(rows []store.ExtRow) (he, fire, flashed, smokes metric) {
@@ -388,7 +426,7 @@ type utilityResponse struct {
 		Smokes       metric `json:"smokes"`
 		GrenadeKills struct {
 			metric
-			Total int `json:"total"`
+			Count int `json:"count"` // все убийства гранатами за период
 			HE    int `json:"he"`
 			Fire  int `json:"fire"`
 		} `json:"grenadeKills"`
@@ -416,7 +454,7 @@ func (s *Server) getPlayerUtility(w http.ResponseWriter, r *http.Request) {
 	covered, _ := split(rows, needExt)
 	ext, _, _, _ := sumExt(covered)
 	g.GrenadeKills.metric = coverage(rows, needExt)
-	g.GrenadeKills.Total, g.GrenadeKills.HE, g.GrenadeKills.Fire = ext.GrenadeKills(), ext.HEKills, ext.FireKills
+	g.GrenadeKills.Count, g.GrenadeKills.HE, g.GrenadeKills.Fire = ext.GrenadeKills(), ext.HEKills, ext.FireKills
 
 	byMap := map[string][]store.ExtRow{}
 	var maps []string
@@ -436,6 +474,7 @@ func (s *Server) getPlayerUtility(w http.ResponseWriter, r *http.Request) {
 	for _, name := range maps {
 		gm := grenadeMap{Map: name, Matches: len(byMap[name])}
 		gm.HE, gm.Fire, gm.Flashed, gm.Smokes = grenadeMetrics(byMap[name])
+		gm.Kills = sumMetric(byMap[name], needExt, func(c stats.ExtCounters) int { return c.HEKills + c.FireKills })
 		resp.ByMap = append(resp.ByMap, gm)
 	}
 

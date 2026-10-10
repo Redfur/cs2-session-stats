@@ -73,6 +73,9 @@ func TestPlayerExtTabs(t *testing.T) {
 	saveParsed(t, e, s1, "new", extMatch(), store.ExtendedSinceVersion)
 	old := saveParsed(t, e, s2, "old", extMatch(), store.ExtendedSinceVersion-1)
 	a1 := fmt.Sprint(extA1)
+	if err := e.store.FailMatch(ctx, old, "битая демка", store.ExtendedSinceVersion); err != nil {
+		t.Fatal(err)
+	}
 
 	var f fightResponse
 	if code := e.do(t, "GET", "/api/players/"+a1+"/fight", "", nil, &f); code != 200 {
@@ -81,6 +84,9 @@ func TestPlayerExtTabs(t *testing.T) {
 	if f.Status != "partial" || f.EligibleMatches != 2 || f.CoveredMatches != 1 ||
 		len(f.UncoveredMatches) != 1 || f.UncoveredMatches[0].ID != old || f.UncoveredMatches[0].Reason != missingOld {
 		t.Errorf("заголовок: %+v", f.extHeader)
+	}
+	if len(f.Failed) != 1 || f.Failed[0].ID != old || f.Failed[0].Error != "битая демка" || len(f.Reparsing) != 0 {
+		t.Errorf("ошибки пересчёта: %+v %+v", f.Failed, f.Reparsing)
 	}
 	if f.Trades.TradedDeaths != 0 || f.Trades.Deaths != 1 || f.Trades.Kills != 1 || f.Trades.Covered != 1 || f.Trades.Total != 2 {
 		t.Errorf("размены: %+v", f.Trades)
@@ -98,7 +104,7 @@ func TestPlayerExtTabs(t *testing.T) {
 	if f.Assists.Flash != 1 || f.Assists.Damage != 0 || f.Assists.Unknown != 1 || f.Assists.Total != 2 {
 		t.Errorf("ассисты: %+v", f.Assists)
 	}
-	if f.Clutches.Total.Attempts != 0 || f.Clutches.Total.WinRate != nil || len(f.Clutches.Rows) != 5 {
+	if f.Clutches.Sum.Attempts != 0 || f.Clutches.Sum.WinRate != nil || len(f.Clutches.Rows) != 5 {
 		t.Errorf("клатчи a1: %+v", f.Clutches)
 	}
 

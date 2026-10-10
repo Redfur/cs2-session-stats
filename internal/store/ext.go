@@ -108,6 +108,8 @@ type ExtRow struct {
 	SessionID int64
 	Ordinal   int
 	Map       string
+	Status    MatchStatus
+	Error     string // ошибка последнего пересчёта
 	SteamID   uint64
 	Name      string
 	Team      string
@@ -128,7 +130,7 @@ func (s *Store) extRows(ctx context.Context, where string, args ...any) ([]ExtRo
 		cols[i] = "coalesce(x." + f + ", 0)"
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT m.id, m.session_id, m.ordinal, m.map, mp.steam_id, mp.name, mp.team, `+extCovered+` AND x.match_id IS NOT NULL,
+		SELECT m.id, m.session_id, m.ordinal, m.map, m.status, m.error, mp.steam_id, mp.name, mp.team, `+extCovered+` AND x.match_id IS NOT NULL,
 			m.has_damage_events, m.has_flash_events, mp.kills, mp.deaths, mp.assists, mp.rounds, mp.damage,
 			`+strings.Join(cols, ", ")+`
 		`+fromPlayerMatches+`
@@ -143,7 +145,7 @@ func (s *Store) extRows(ctx context.Context, where string, args ...any) ([]ExtRo
 	for rows.Next() {
 		var r ExtRow
 		var steamID int64
-		dest := append([]any{&r.MatchID, &r.SessionID, &r.Ordinal, &r.Map, &steamID, &r.Name, &r.Team, &r.Covered,
+		dest := append([]any{&r.MatchID, &r.SessionID, &r.Ordinal, &r.Map, &r.Status, &r.Error, &steamID, &r.Name, &r.Team, &r.Covered,
 			&r.HasDamage, &r.HasFlash, &r.Kills, &r.Deaths, &r.Assists, &r.Rounds, &r.Damage}, extTargets(&r.Ext)...)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, err
