@@ -25,7 +25,9 @@ import (
 // Версия 2: вместе с результатом сохраняются личные дуэли (store.DuelsSinceVersion).
 // Версия 3: расширенная статистика — размены, клатчи, оружие, гранаты, хронология раундов
 // (store.ExtendedSinceVersion).
-const ProcessingVersion = 3
+// Версия 4: у раундов сохраняются снаряжение команд и время установки бомбы для Round Swing
+// (store.SwingSinceVersion).
+const ProcessingVersion = 4
 
 // DemoOpener открывает сохранённую демку по sha256.
 type DemoOpener interface {

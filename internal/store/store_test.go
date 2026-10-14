@@ -29,8 +29,8 @@ func TestMigrationsIdempotent(t *testing.T) {
 		if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 			t.Fatal(err)
 		}
-		if version != 5 {
-			t.Fatalf("user_version = %d, ожидалось 5", version)
+		if version != 6 {
+			t.Fatalf("user_version = %d, ожидалось 6", version)
 		}
 		for _, table := range []string{"sessions", "matches", "match_players", "match_duels", "imports",
 			"match_player_ext", "match_player_weapons", "match_rounds", "match_kills", "match_clutches"} {

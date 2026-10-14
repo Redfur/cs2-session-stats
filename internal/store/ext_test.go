@@ -17,8 +17,9 @@ func extResult(trades int) MatchResult {
 			{SteamID: 1, ExtCounters: stats.ExtCounters{Rounds: 13, TradeKills: trades, HEDamage: 50}},
 			{SteamID: 2, ExtCounters: stats.ExtCounters{Rounds: 13}},
 		},
-		Weapons:  []stats.WeaponStats{{SteamID: 1, Weapon: "ak47", Kills: 5, HSKills: 2, Damage: 500, Shots: 60, Hits: 20, HSHits: 4}},
-		Rounds:   []stats.RoundInfo{{Number: 1, Winner: parser.TeamA, SideA: parser.SideCT, Reason: parser.ReasonBomb, Start: time.Second, End: time.Minute}},
+		Weapons: []stats.WeaponStats{{SteamID: 1, Weapon: "ak47", Kills: 5, HSKills: 2, Damage: 500, Shots: 60, Hits: 20, HSHits: 4}},
+		Rounds: []stats.RoundInfo{{Number: 1, Winner: parser.TeamA, SideA: parser.SideCT, Reason: parser.ReasonBomb, Start: time.Second, End: time.Minute,
+			EquipA: 23500, EquipB: 4100, Plant: 40 * time.Second}},
 		Kills:    []stats.KillEvent{{Round: 1, Seq: 1, Time: 30 * time.Second, Killer: 1, Victim: 2, Weapon: "ak47", Headshot: true, Trade: true}},
 		Clutches: []stats.Clutch{{Round: 1, SteamID: 1, Vs: 2, Outcome: stats.ClutchWin}},
 	}
@@ -57,6 +58,21 @@ func TestSaveMatchResultExt(t *testing.T) {
 	}
 	if e.Rounds[0].Reason != parser.ReasonBomb || e.Rounds[0].End != time.Minute || e.Clutches[0].Outcome != stats.ClutchWin {
 		t.Errorf("раунд и клатч: %+v %+v", e.Rounds[0], e.Clutches[0])
+	}
+	if r := e.Rounds[0]; r.EquipA != 23500 || r.EquipB != 4100 || r.Plant != 40*time.Second {
+		t.Errorf("снаряжение и бомба раунда: %+v", r)
+	}
+
+	// раунд, записанный без новых колонок (как до миграции 006), читается с нулями
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO match_rounds (match_id, number, winner, side_a, reason, start_ms, end_ms, restored)
+		VALUES (?, 2, 'B', 'CT', 'time', 0, 0, 0)`, id); err != nil {
+		t.Fatal(err)
+	}
+	if e, _ := s.GetMatchExt(ctx, id); e.Rounds[1].EquipA != 0 || e.Rounds[1].EquipB != 0 || e.Rounds[1].Plant != 0 {
+		t.Errorf("старый раунд: %+v", e.Rounds[1])
+	}
+	if _, err := s.db.ExecContext(ctx, "DELETE FROM match_rounds WHERE match_id = ? AND number = 2", id); err != nil {
+		t.Fatal(err)
 	}
 
 	// ошибка пересчёта сохраняет прежние данные

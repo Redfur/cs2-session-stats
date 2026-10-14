@@ -282,4 +282,7 @@ func TestProcessingVersionHasDuels(t *testing.T) {
 	if ProcessingVersion < store.ExtendedSinceVersion {
 		t.Fatalf("ProcessingVersion %d ниже store.ExtendedSinceVersion %d", ProcessingVersion, store.ExtendedSinceVersion)
 	}
+	if ProcessingVersion < store.SwingSinceVersion {
+		t.Fatalf("ProcessingVersion %d ниже store.SwingSinceVersion %d", ProcessingVersion, store.SwingSinceVersion)
+	}
 }

@@ -115,6 +115,9 @@ type RoundInfo struct {
 	Start    time.Duration
 	End      time.Duration
 	Restored bool
+	// стоимость снаряжения команд на конец freeze time; 0 — неизвестна
+	EquipA, EquipB int
+	Plant          time.Duration // установка бомбы от начала демки; 0 — бомбу не установили
 }
 
 // KillEvent — убийство в ходе раунда. Time — от начала демки.
@@ -210,6 +213,7 @@ func ComputeExt(m parser.Match) Ext {
 		ext.Rounds = append(ext.Rounds, RoundInfo{
 			Number: r.Number, Winner: r.Winner, SideA: r.SideA, Reason: r.Reason,
 			Start: r.Start, End: r.End, Restored: r.Restored,
+			EquipA: r.EquipA, EquipB: r.EquipB, Plant: plantTime(r),
 		})
 		if firstStart == 0 && r.Start > 0 {
 			firstStart = r.Start
@@ -487,4 +491,14 @@ func clutchOutcome(r parser.Round, t parser.Team) ClutchOutcome {
 		return ClutchWin
 	}
 	return ClutchLoss
+}
+
+// plantTime — время первой установки бомбы в раунде; 0 — бомбу не установили.
+func plantTime(r parser.Round) time.Duration {
+	for _, e := range r.Bomb {
+		if e.Action == parser.BombPlanted {
+			return e.Time
+		}
+	}
+	return 0
 }

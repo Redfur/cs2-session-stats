@@ -2,9 +2,9 @@
 
 ## 1. Данные из демок
 
-- [ ] 1.1 `internal/parser`: `Round.EquipA`/`EquipB` — суммы `EquipmentValueFreezeTimeEnd()` игроков команд на `RoundFreezetimeEnd`; `BombEvent.Time`. Тесты на синтетике там, где builder тестируется; проверка на реальной демке: `CS2STATS_TEST_DEMO=… go test -run TestParseRealDemo -v ./internal/parser/` и временный вывод — снаряжение > 0 в каждом раунде, у пистолетных раундов около 4 000 $ на команду, время установки внутри раунда
-- [ ] 1.2 Миграция `006_round_swing.sql` (`match_rounds`: `equip_a`, `equip_b`, `plant_ms`), запись в `SaveMatchResult` из `ComputeExt`; `store.SwingSinceVersion = 4`, `worker.ProcessingVersion = 4`; тесты store на временной SQLite: значения сохраняются, у старых строк 0, повторный пересчёт не удваивает раунды; тест worker: при старте матчи версии 3 встают на пересчёт
-- [ ] 1.3 CLAUDE.md (инварианты: `SwingSinceVersion`, данные Round Swing) и README (пересчёт после обновления); проверка — описание совпадает с кодом
+- [x] 1.1 `internal/parser`: `Round.EquipA`/`EquipB` — суммы `EquipmentValueFreezeTimeEnd()` игроков команд на `RoundFreezetimeEnd`; `BombEvent.Time`. Тесты на синтетике там, где builder тестируется; проверка на реальной демке: `CS2STATS_TEST_DEMO=… go test -run TestParseRealDemo -v ./internal/parser/` и временный вывод — снаряжение > 0 в каждом раунде, у пистолетных раундов около 4 000 $ на команду, время установки внутри раунда
+- [x] 1.2 Миграция `006_round_swing.sql` (`match_rounds`: `equip_a`, `equip_b`, `plant_ms`), запись в `SaveMatchResult` из `ComputeExt`; `store.SwingSinceVersion = 4`, `worker.ProcessingVersion = 4`; тесты store на временной SQLite: значения сохраняются, у старых строк 0, повторный пересчёт не удваивает раунды; тест worker: при старте матчи версии 3 встают на пересчёт
+- [x] 1.3 CLAUDE.md (инварианты: `SwingSinceVersion`, данные Round Swing) и README (пересчёт после обновления); проверка — описание совпадает с кодом
 
 ## 2. Round Swing и значение матча
 

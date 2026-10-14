@@ -182,10 +182,25 @@ func (b *builder) id(pl *common.Player) uint64 {
 	return sid
 }
 
-// freezeEnd отмечает начало активной части раунда.
+// freezeEnd отмечает начало активной части раунда и снимает стоимость снаряжения команд
+// после закупки.
 func (b *builder) freezeEnd() {
-	if b.cur >= 0 && b.rounds[b.cur].Start == 0 {
-		b.rounds[b.cur].Start = b.p.CurrentTime()
+	if b.cur < 0 || b.rounds[b.cur].Start != 0 {
+		return
+	}
+	r := &b.rounds[b.cur]
+	r.Start = b.p.CurrentTime()
+	for _, pl := range b.p.GameState().Participants().Playing() {
+		id := b.id(pl)
+		if id == 0 {
+			continue
+		}
+		v := pl.EquipmentValueFreezeTimeEnd()
+		if b.team[id] == TeamA {
+			r.EquipA += v
+		} else {
+			r.EquipB += v
+		}
 	}
 }
 
@@ -273,7 +288,7 @@ func (b *builder) onBomb(a BombAction, pl *common.Player) {
 		return
 	}
 	if id := b.id(pl); id != 0 {
-		b.rounds[b.cur].Bomb = append(b.rounds[b.cur].Bomb, BombEvent{Action: a, Player: id})
+		b.rounds[b.cur].Bomb = append(b.rounds[b.cur].Bomb, BombEvent{Action: a, Player: id, Time: b.p.CurrentTime()})
 	}
 }
 

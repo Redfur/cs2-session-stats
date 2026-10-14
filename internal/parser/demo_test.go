@@ -4,6 +4,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 )
 
 // TestParseRealDemo проверяет парсер на настоящей демке. Путь задаётся через
@@ -29,6 +30,29 @@ func TestParseRealDemo(t *testing.T) {
 	for _, p := range m.Players {
 		if p.SteamID == 0 || (p.Team != TeamA && p.Team != TeamB) {
 			t.Errorf("некорректный игрок: %+v", p)
+		}
+	}
+	// снаряжение на конец закупки есть у обеих команд; установка бомбы — внутри раунда
+	for _, r := range m.Rounds {
+		if r.Restored || r.Start == 0 {
+			continue
+		}
+		if r.EquipA <= 0 || r.EquipB <= 0 {
+			t.Errorf("раунд %d: снаряжение A=%d B=%d", r.Number, r.EquipA, r.EquipB)
+		}
+		for _, e := range r.Bomb {
+			if e.Action == BombPlanted && (e.Time < r.Start || r.End > 0 && e.Time > r.End) {
+				t.Errorf("раунд %d: бомба установлена в %v вне раунда %v–%v", r.Number, e.Time, r.Start, r.End)
+			}
+		}
+		if testing.Verbose() {
+			var plant time.Duration
+			for _, e := range r.Bomb {
+				if e.Action == BombPlanted {
+					plant = e.Time - r.Start
+				}
+			}
+			t.Logf("раунд %2d: снаряжение A=%5d B=%5d, бомба через %v", r.Number, r.EquipA, r.EquipB, plant.Round(time.Second))
 		}
 	}
 	if want := os.Getenv("CS2STATS_TEST_ROUNDS"); want != "" {

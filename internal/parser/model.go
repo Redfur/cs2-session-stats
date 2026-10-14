@@ -104,6 +104,7 @@ const (
 type BombEvent struct {
 	Action BombAction
 	Player uint64
+	Time   time.Duration // время от начала демки
 }
 
 type Round struct {
@@ -117,6 +118,9 @@ type Round struct {
 	End      time.Duration // событие RoundEnd; 0 — не наблюдалось
 	Reason   Reason        // пусто, если RoundEnd не наблюдался
 	Restored bool          // победитель восстановлен из итогового счёта
+
+	// стоимость снаряжения команд на конец freeze time; 0 — неизвестна
+	EquipA, EquipB int
 
 	Shots   []Shot
 	Throws  []Throw

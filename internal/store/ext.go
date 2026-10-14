@@ -15,6 +15,10 @@ import (
 // статистика. Она посчитана, если has_result = 1 и result_version не ниже этой версии.
 const ExtendedSinceVersion = 3
 
+// SwingSinceVersion — версия обработки, с которой у раундов сохранены снаряжение команд и время
+// установки бомбы: по ним считается Round Swing.
+const SwingSinceVersion = 4
+
 var extCovered = fmt.Sprintf("m.result_version >= %d", ExtendedSinceVersion)
 
 var extFields = []string{"rounds", "traded_deaths", "trade_kills", "damage_dealt", "damage_taken",
@@ -72,9 +76,10 @@ func saveExt(ctx context.Context, tx *sql.Tx, matchID int64, e *stats.Ext) error
 	}
 	for _, r := range e.Rounds {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO match_rounds (match_id, number, winner, side_a, reason, start_ms, end_ms, restored)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			matchID, r.Number, r.Winner, r.SideA, r.Reason, r.Start.Milliseconds(), r.End.Milliseconds(), r.Restored)
+			INSERT INTO match_rounds (match_id, number, winner, side_a, reason, start_ms, end_ms, restored, equip_a, equip_b, plant_ms)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			matchID, r.Number, r.Winner, r.SideA, r.Reason, r.Start.Milliseconds(), r.End.Milliseconds(), r.Restored,
+			r.EquipA, r.EquipB, r.Plant.Milliseconds())
 		if err != nil {
 			return fmt.Errorf("раунд %d: %w", r.Number, err)
 		}
@@ -289,19 +294,20 @@ func (s *Store) GetMatchExt(ctx context.Context, matchID int64) (MatchExt, error
 	e.Duration = time.Duration(durMs) * time.Millisecond
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT number, winner, side_a, reason, start_ms, end_ms, restored FROM match_rounds
+		SELECT number, winner, side_a, reason, start_ms, end_ms, restored, equip_a, equip_b, plant_ms FROM match_rounds
 		WHERE match_id = ? ORDER BY number`, matchID)
 	if err != nil {
 		return e, err
 	}
 	for rows.Next() {
 		var r stats.RoundInfo
-		var start, end int64
-		if err := rows.Scan(&r.Number, &r.Winner, &r.SideA, &r.Reason, &start, &end, &r.Restored); err != nil {
+		var start, end, plant int64
+		if err := rows.Scan(&r.Number, &r.Winner, &r.SideA, &r.Reason, &start, &end, &r.Restored, &r.EquipA, &r.EquipB, &plant); err != nil {
 			rows.Close()
 			return e, err
 		}
 		r.Start, r.End = time.Duration(start)*time.Millisecond, time.Duration(end)*time.Millisecond
+		r.Plant = time.Duration(plant) * time.Millisecond
 		e.Rounds = append(e.Rounds, r)
 	}
 	rows.Close()
