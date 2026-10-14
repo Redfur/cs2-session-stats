@@ -57,8 +57,8 @@ func TestSessionPlayers(t *testing.T) {
 		t.Errorf("KAST=%v HS=%v", p.KASTPercent(), p.HSPercent())
 	}
 	// rating за сессию = среднее рейтингов матчей, взвешенное по раундам
-	r1 := stats.Counters{Rounds: 20, Kills: 10, Deaths: 12, K1: 6, K2: 2}.Rating()
-	r2 := stats.Counters{Rounds: 30, Kills: 30, Deaths: 18, K1: 10, K2: 5, K3: 2, K5: 1}.Rating()
+	r1 := stats.Counters{Rounds: 20, Kills: 10, HSKills: 5, Deaths: 12, Damage: 1600, KASTRounds: 10, K1: 6, K2: 2}.Rating()
+	r2 := stats.Counters{Rounds: 30, Kills: 30, HSKills: 3, Deaths: 18, Damage: 2400, KASTRounds: 27, K1: 10, K2: 5, K3: 2, K5: 1}.Rating()
 	want := (r1*20 + r2*30) / 50
 	if math.Abs(p.Rating()-want) > 1e-9 {
 		t.Errorf("rating = %v, ожидалось %v", p.Rating(), want)

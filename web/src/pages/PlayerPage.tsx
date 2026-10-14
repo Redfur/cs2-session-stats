@@ -215,7 +215,7 @@ export function PlayerPage() {
       )}
 
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-6 md:gap-4">
-        <StatTile label="Rating" value={formatMetric('rating', t.rating)} sub="HLTV 1.0" metric={{ metric: 'rating', value: t.rating }} />
+        <StatTile label="Rating" value={formatMetric('rating', t.rating)} sub="HLTV 2.0" metric={{ metric: 'rating', value: t.rating }} />
         <StatTile label="ADR" value={formatMetric('adr', t.adr)} sub="урон за раунд" metric={{ metric: 'adr', value: t.adr }} />
         <StatTile label="K/D" value={formatMetric('kd', t.kd)} sub={`${t.kills} / ${t.deaths}`} metric={{ metric: 'kd', value: t.kd }} />
         <StatTile label="KAST" value={formatMetric('kast', t.kastPct)} sub="полезные раунды" metric={{ metric: 'kast', value: t.kastPct }} />

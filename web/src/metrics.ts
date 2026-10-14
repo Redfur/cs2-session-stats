@@ -5,7 +5,7 @@ export type MetricLevel = 'good' | 'mid' | 'bad'
 
 // [нижняя, верхняя] граница «средне»; сами границы относятся к «средне»
 const THRESHOLDS: Record<Metric, [number, number]> = {
-  rating: [0.85, 1.15],
+  rating: [0.95, 1.25],
   kd: [0.85, 1.15],
   adr: [60, 90],
   kast: [65, 75],

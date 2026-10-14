@@ -172,12 +172,48 @@ func TestDuplicatePlayersMerged(t *testing.T) {
 }
 
 func TestRatingAverage(t *testing.T) {
-	// средние значения формулы: 0.679 убийств, 0.317 выживаемости и 1.277 RMK на раунд
-	c := Counters{Rounds: 1000, Kills: 679, Deaths: 683, K1: 1277}
-	if math.Abs(c.Rating()-1) > 1e-9 {
-		t.Errorf("rating = %v, ожидалось 1.00", c.Rating())
+	// сценарий «Средний игрок»: KAST 70%, 0.65 K, 0.68 D, 0.13 A и 70 урона за раунд
+	c := Counters{Rounds: 100, Kills: 65, Deaths: 68, Assists: 13, Damage: 7000, KASTRounds: 70}
+	want := 0.0073*70 + 0.3591*0.65 - 0.5329*0.68 + 0.2372*(2.13*0.65+0.42*0.13-0.41) + 0.0032*70 + 0.1587
+	if math.Abs(c.Rating()-want) > 1e-9 || math.Round(c.Rating()*100) != 101 {
+		t.Errorf("rating = %v, ожидалось %v (≈ 1.01)", c.Rating(), want)
 	}
-	if (Counters{}).Rating() != 0 {
+	if (Counters{}).Rating() != 0 || (Counters{}).Rating1() != 0 {
 		t.Error("rating без раундов должен быть 0")
+	}
+}
+
+func TestRatingWeightedByRounds(t *testing.T) {
+	a := Counters{Rounds: 16, Kills: 20, Deaths: 8, Assists: 3, Damage: 2200, KASTRounds: 13}
+	b := Counters{Rounds: 30, Kills: 15, Deaths: 25, Assists: 6, Damage: 1900, KASTRounds: 17}
+	want := (a.Rating()*16 + b.Rating()*30) / 46
+	if got := a.Add(b).Rating(); math.Abs(got-want) > 1e-9 {
+		t.Errorf("rating суммы = %v, ожидалось среднее по раундам %v", got, want)
+	}
+}
+
+func TestRating1Average(t *testing.T) {
+	// средние значения формулы 1.0: 0.679 убийств, 0.317 выживаемости и 1.277 RMK на раунд
+	c := Counters{Rounds: 1000, Kills: 679, Deaths: 683, K1: 1277}
+	if math.Abs(c.Rating1()-1) > 1e-9 {
+		t.Errorf("rating 1.0 = %v, ожидалось 1.00", c.Rating1())
+	}
+}
+
+func TestScore(t *testing.T) {
+	// средний rating компании 1.084 → 60, центр шкалы 0.95 → 50
+	if got := ScorePoints(1.084); got != 60 {
+		t.Errorf("оценка rating 1.084 = %d, ожидалось 60", got)
+	}
+	if got := Score(0.95); math.Abs(got-50) > 1e-9 {
+		t.Errorf("оценка rating 0.95 = %v, ожидалось 50", got)
+	}
+	prev := -1.0
+	for r := 0.0; r <= 2.5; r += 0.05 {
+		s := Score(r)
+		if s < prev || s <= 0 || s >= 100 {
+			t.Fatalf("Score(%v) = %v: шкала должна возрастать в пределах (0, 100)", r, s)
+		}
+		prev = s
 	}
 }

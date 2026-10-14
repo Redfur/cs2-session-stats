@@ -65,10 +65,23 @@ const (
 	ratingNormalizator = 2.7
 )
 
-// Rating считает HLTV Rating 1.0. Все слагаемые — величины «на раунд»,
-// поэтому рейтинг по суммарным счётчикам нескольких матчей равен среднему
-// рейтингу матчей, взвешенному по числу раундов.
+// Rating считает HLTV Rating 2.0 по восстановленной формуле (коэффициенты awpy).
+// Формула линейна по величинам «на раунд», поэтому рейтинг по суммарным счётчикам
+// нескольких матчей равен среднему рейтингу матчей, взвешенному по числу раундов.
 func (c Counters) Rating() float64 {
+	if c.Rounds == 0 {
+		return 0
+	}
+	r := float64(c.Rounds)
+	kpr := float64(c.Kills) / r
+	dpr := float64(c.Deaths) / r
+	apr := float64(c.Assists) / r
+	impact := 2.13*kpr + 0.42*apr - 0.41
+	return 0.0073*c.KASTPercent() + 0.3591*kpr - 0.5329*dpr + 0.2372*impact + 0.0032*c.ADR() + 0.1587
+}
+
+// Rating1 считает HLTV Rating 1.0. В API не выводится, оставлен для сравнения формул.
+func (c Counters) Rating1() float64 {
 	if c.Rounds == 0 {
 		return 0
 	}

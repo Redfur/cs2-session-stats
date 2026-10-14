@@ -169,7 +169,7 @@ export function detailColumns(kind: 'match' | 'session', r: DetailReasons): Colu
     kind === 'session' && {
       key: 'rating',
       label: 'Rating',
-      title: 'HLTV Rating 1.0',
+      title: 'HLTV Rating 2.0',
       numeric: true,
       metric: 'rating',
       strong: true,

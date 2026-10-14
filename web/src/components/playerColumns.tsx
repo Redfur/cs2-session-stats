@@ -51,7 +51,7 @@ const statColumns: Column<PlayerRow>[] = [
     ...count('open', 'Open K/D', 'Первые убийства / смерти раунда', (p) => p.openingKills - p.openingDeaths, 84),
     render: (p) => `${p.openingKills}/${p.openingDeaths}`,
   },
-  { key: 'rating', label: 'Rating', title: 'HLTV Rating 1.0', numeric: true, metric: 'rating', strong: true, value: (p) => p.rating, width: 80 },
+  { key: 'rating', label: 'Rating', title: 'HLTV Rating 2.0', numeric: true, metric: 'rating', strong: true, value: (p) => p.rating, width: 80 },
 ]
 
 // Сводные таблицы: с колонками матчей и побед.

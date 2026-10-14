@@ -2,9 +2,9 @@
 
 ## 1. Rating 2.0 и шкала
 
-- [ ] 1.1 `internal/stats`: `Counters.Rating()` → восстановленный Rating 2.0, старая формула → `Rating1()`, `Score(r)` с предварительными `k = 4`, `r0 = 0.899`; тесты: сценарий «Средний игрок» из дельты `match-stats` (≈ 1.01), ноль раундов, rating суммы двух матчей равен среднему, взвешенному по раундам, возрастание `Score`, `Score(1.00) = 60`; `go test ./internal/stats/`
-- [ ] 1.2 Подписи «HLTV Rating 1.0» → «HLTV Rating 2.0» в `web/src/components/playerColumns.tsx`, `detailColumns.tsx`, `PlayerPage.tsx` (плитка); README (раздел о rating и «Rating считается по формуле HLTV 1.0»), инвариант «Rating — HLTV 1.0» в `CLAUDE.md`; `make test`
-- [ ] 1.3 Подбор констант на копии `data/` (временный тест или скрипт вне репозитория): распределение Rating 2.0 по матчам и по игрокам с 10+ матчами; подобрать `k`, `r0` так, чтобы постоянные игроки были примерно в 40–90; проверить пороги `rating` `[0.85, 1.15]`. Записать выбранные значения в `design.md` (решения 2 и 7) и `openspec/roadmap.md`; если пороги меняются — поправить `metrics.ts`, README и добавить дельту требования «Шкала показателей» в `specs/web-ui`. Проверка: числа записаны, `openspec validate add-player-rating --strict`
+- [x] 1.1 `internal/stats`: `Counters.Rating()` → восстановленный Rating 2.0, старая формула → `Rating1()`, `Score(r)` с предварительными `k = 4`, `r0 = 0.899`; тесты: сценарий «Средний игрок» из дельты `match-stats` (≈ 1.01), ноль раундов, rating суммы двух матчей равен среднему, взвешенному по раундам, возрастание `Score`, `Score(1.00) = 60`; `go test ./internal/stats/`
+- [x] 1.2 Подписи «HLTV Rating 1.0» → «HLTV Rating 2.0» в `web/src/components/playerColumns.tsx`, `detailColumns.tsx`, `PlayerPage.tsx` (плитка); README (раздел о rating и «Rating считается по формуле HLTV 1.0»), инвариант «Rating — HLTV 1.0» в `CLAUDE.md`; `make test`
+- [x] 1.3 Подбор констант на копии `data/` (временный тест или скрипт вне репозитория): распределение Rating 2.0 по матчам и по игрокам с 10+ матчами; подобрать `k`, `r0` так, чтобы постоянные игроки были примерно в 40–90; проверить пороги `rating` `[0.85, 1.15]`. Записать выбранные значения в `design.md` (решения 2 и 7) и `openspec/roadmap.md`; если пороги меняются — поправить `metrics.ts`, README и добавить дельту требования «Шкала показателей» в `specs/web-ui`. Проверка: числа записаны, `openspec validate add-player-rating --strict`
 
 ## 2. OVR и сравнения
 
