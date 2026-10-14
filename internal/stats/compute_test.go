@@ -201,12 +201,12 @@ func TestRating1Average(t *testing.T) {
 }
 
 func TestScore(t *testing.T) {
-	// средний rating компании 1.084 → 60, центр шкалы 0.95 → 50
-	if got := ScorePoints(1.084); got != 60 {
-		t.Errorf("оценка rating 1.084 = %d, ожидалось 60", got)
+	// среднее значение матча компании 1.056 → 60, центр шкалы 0.921 → 50
+	if got := ScorePoints(1.056); got != 60 {
+		t.Errorf("оценка значения 1.056 = %d, ожидалось 60", got)
 	}
-	if got := Score(0.95); math.Abs(got-50) > 1e-9 {
-		t.Errorf("оценка rating 0.95 = %v, ожидалось 50", got)
+	if got := Score(0.921); math.Abs(got-50) > 1e-9 {
+		t.Errorf("оценка значения 0.921 = %v, ожидалось 50", got)
 	}
 	prev := -1.0
 	for r := 0.0; r <= 2.5; r += 0.05 {

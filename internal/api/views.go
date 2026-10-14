@@ -22,7 +22,8 @@ type PlayerView struct {
 	HSPct   float64 `json:"hsPct"`
 	KASTPct float64 `json:"kastPct"`
 	Rating  float64 `json:"rating"`
-	// Score — оценка 0–100 по rating; нет, если раундов нет.
+	// Score — оценка 0–100 по значению матча (Rating 2.0 и Round Swing): у строк матча и сессии;
+	// у итогов периода и карт её нет.
 	Score *int `json:"score,omitempty"`
 
 	// Поля рейтинга, которые заполняются только в своих ответах.
@@ -33,13 +34,7 @@ type PlayerView struct {
 }
 
 func newPlayerView(steamID uint64, name string, c stats.Counters) PlayerView {
-	var score *int
-	if c.Rounds > 0 {
-		v := stats.ScorePoints(c.Rating())
-		score = &v
-	}
 	return PlayerView{
-		Score:    score,
 		SteamID:  strconv.FormatUint(steamID, 10),
 		Name:     name,
 		Counters: c,

@@ -25,7 +25,7 @@ func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 
 func TestFirstMatch(t *testing.T) {
 	c := counters(24, 1.20)
-	b := Build([]MatchRow{row(1, 1, 7, c)}, params)
+	b := Build([]MatchRow{row(1, 1, 7, c)}, nil, params)
 	s, ok := b.OVR(7)
 	if !ok || !near(s.Rating, c.Rating()) || s.Matches != 1 {
 		t.Fatalf("OVR после первого матча = %+v, ожидался rating матча %v", s, c.Rating())
@@ -40,7 +40,7 @@ func TestFirstMatch(t *testing.T) {
 
 func TestFewMatchesIsMean(t *testing.T) {
 	a, c := counters(24, 0.80), counters(24, 1.20)
-	b := Build([]MatchRow{row(1, 1, 7, a), row(2, 1, 7, c)}, params)
+	b := Build([]MatchRow{row(1, 1, 7, a), row(2, 1, 7, c)}, nil, params)
 	s, _ := b.OVR(7)
 	if !near(s.Rating, a.Add(c).Rating()) || math.Abs(s.Rating-1.00) > 0.01 {
 		t.Errorf("OVR = %v, ожидался rating суммы счётчиков %v (≈ 1.00)", s.Rating, a.Add(c).Rating())
@@ -58,7 +58,7 @@ func TestRecentMatchesWeighMore(t *testing.T) {
 		sum = sum.Add(c)
 		rows = append(rows, row(int64(i+1), 1, 7, c))
 	}
-	s, _ := Build(rows, params).OVR(7)
+	s, _ := Build(rows, nil, params).OVR(7)
 	if s.Rating <= sum.Rating()+0.01 {
 		t.Errorf("OVR = %v: новые матчи должны весить больше, чем в среднем по всем (%v)", s.Rating, sum.Rating())
 	}
@@ -69,11 +69,11 @@ func TestCalibration(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		rows = append(rows, row(int64(i+1), 1, 7, counters(24, 1)))
 	}
-	b := Build(rows[:9], params)
+	b := Build(rows[:9], nil, params)
 	if s, _ := b.OVR(7); !b.Calibrating(s.Matches) {
 		t.Error("9 матчей — ещё калибровка")
 	}
-	b = Build(rows, params)
+	b = Build(rows, nil, params)
 	if s, _ := b.OVR(7); b.Calibrating(s.Matches) {
 		t.Error("10 матчей — калибровка закончена")
 	}
@@ -86,13 +86,13 @@ func TestSessionChange(t *testing.T) {
 		row(3, 2, 7, counters(24, 1.40)), row(3, 2, 8, counters(24, 1.00)),
 		row(4, 2, 7, counters(24, 1.20)),
 	}
-	b := Build(rows[:4], params)
+	b := Build(rows[:4], nil, params)
 	first, ok := b.Session(7, 1)
 	if !ok || first.HasBefore {
 		t.Fatalf("первая сессия игрока: %+v, ожидалось без «до»", first)
 	}
-	if first.Counters != rows[0].Counters.Add(rows[1].Counters) {
-		t.Errorf("счётчики сессии %+v", first.Counters)
+	if want := (rows[0].Rating() + rows[1].Rating()) / 2; !near(first.Value, want) {
+		t.Errorf("значение сессии %v, ожидалось среднее матчей %v", first.Value, want)
 	}
 	second, _ := b.Session(7, 2)
 	before, _ := b.Before(7, 3)
@@ -101,7 +101,7 @@ func TestSessionChange(t *testing.T) {
 	}
 
 	// следующая сессия не меняет изменение за прошлую
-	b = Build(rows, params)
+	b = Build(rows, nil, params)
 	if again, _ := b.Session(7, 1); again != first {
 		t.Errorf("изменение за первую сессию стало %+v, было %+v", again, first)
 	}
@@ -118,19 +118,44 @@ func TestSessionChange(t *testing.T) {
 
 func TestLast(t *testing.T) {
 	var rows []MatchRow
-	var want stats.Counters
+	var sum, rounds float64
 	for i := 0; i < 25; i++ {
-		c := counters(20+i, 1)
+		c := counters(20+i, 0.8+0.02*float64(i))
 		if i >= 5 {
-			want = want.Add(c)
+			sum += c.Rating() * float64(c.Rounds)
+			rounds += float64(c.Rounds)
 		}
 		rows = append(rows, row(int64(i+1), 1, 7, c))
 	}
-	b := Build(rows, params)
-	if got, _ := b.Last(7, 20); got != want {
-		t.Errorf("сумма последних 20 = %+v, ожидалось %+v", got, want)
+	b := Build(rows, nil, params)
+	if got, _ := b.Last(7, 20); !near(got, sum/rounds) {
+		t.Errorf("среднее последних 20 = %v, ожидалось взвешенное по раундам %v", got, sum/rounds)
 	}
-	if got, _ := Build(rows[:3], params).Last(7, 20); got.Rounds != 20+21+22 {
-		t.Errorf("при 3 матчах берутся все: %d раундов", got.Rounds)
+	if _, ok := Build(nil, nil, params).Last(7, 20); ok {
+		t.Error("без матчей значения нет")
+	}
+}
+
+func TestBuildWithSwing(t *testing.T) {
+	// два игрока с одинаковыми счётчиками; в единственном раунде 11 убивает 1 и команда B побеждает
+	c := counters(1, 1.0)
+	rows := []MatchRow{
+		{MatchID: 1, SessionID: 1, SteamID: 1, Team: "A", Counters: c},
+		{MatchID: 1, SessionID: 1, SteamID: 11, Team: "B", Counters: c},
+	}
+	swings := map[int64]SwingMatch{1: {Rounds: []SwingRound{{Winner: "B", SideA: "CT", Kills: []SwingKill{{TimeMs: 1, Killer: 11, Victim: 1}}}}}}
+	b := Build(rows, swings, params)
+	won, _ := b.Match(11, 1)
+	lost, _ := b.Match(1, 1)
+	if !won.HasSwing || won.Swing <= 0 || lost.Swing >= 0 || won.Value <= lost.Value || !near(won.Swing, -lost.Swing) {
+		t.Fatalf("с Round Swing: победитель %+v, проигравший %+v", won, lost)
+	}
+	if !near(won.Value, MatchValue(c.Rating(), won.Swing, true)) {
+		t.Errorf("значение матча %v", won.Value)
+	}
+	// без данных Round Swing значение — Rating 2.0
+	plain, _ := Build(rows, nil, params).Match(11, 1)
+	if plain.HasSwing || !near(plain.Value, c.Rating()) {
+		t.Errorf("без данных: %+v", plain)
 	}
 }

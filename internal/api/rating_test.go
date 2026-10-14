@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
+	"time"
 
+	"cs2stats/internal/parser"
 	"cs2stats/internal/stats"
 	"cs2stats/internal/store"
 )
@@ -75,8 +77,11 @@ func TestRatingInViews(t *testing.T) {
 	e.do(t, http.MethodGet, fmt.Sprintf("/api/sessions/%d", late.ID), "", nil, &sess)
 	var prof profileResponse
 	e.do(t, http.MethodGet, fmt.Sprintf("/api/players/%d", steamA), "", nil, &prof)
-	if byID(sess.Players, steamA).Score == nil || prof.Totals.Score == nil || prof.Sessions[0].Score == nil || prof.Matches[0].Score == nil || prof.Maps[0].Score == nil {
-		t.Fatal("оценка должна быть в итогах сессии и разбивках профиля")
+	if byID(sess.Players, steamA).Score == nil || prof.Sessions[0].Score == nil || prof.Matches[0].Score == nil {
+		t.Fatal("оценка должна быть в итогах сессии и разбивках профиля по сессиям и матчам")
+	}
+	if prof.Totals.Score != nil || prof.Maps[0].Score != nil {
+		t.Error("у итогов периода и карт оценки нет")
 	}
 
 	// OVR не зависит от периода таблицы игроков
@@ -216,5 +221,49 @@ func TestMatchTeamsOVR(t *testing.T) {
 	}
 	if n := byID(m.Players, 11); n.Before != nil || n.VsUsual != nil {
 		t.Error("у новичка сравнения нет")
+	}
+}
+
+// Два игрока с одинаковым Rating 2.0: убийства одного переворачивают раунды, другого — нет.
+func TestScoreFollowsRoundSwing(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	sess, _ := e.store.CreateSession(ctx, "2026-10-01", "")
+	m, _ := e.store.AddMatch(ctx, sess.ID, "swing", "m.dem")
+	c := stats.Counters{Rounds: 2, Kills: 1, Deaths: 1, KASTRounds: 1, Damage: 150}
+	ids := []uint64{steamA, steamB, 3, 4, 5, 6, 7, 8, 9, 10}
+	var ps []stats.PlayerStats
+	for i, id := range ids {
+		team := "A"
+		if i >= 5 {
+			team = "B"
+		}
+		ps = append(ps, stats.PlayerStats{SteamID: id, Name: strconv.FormatUint(id, 10), Team: team, Result: stats.Draw, Counters: c})
+	}
+	// счётчики у всех одинаковые, значит одинаковый Rating 2.0. Раунд 1: steamA делает открывающее
+	// убийство, и A выигрывает. Раунд 2: B убивает всех игроков A, steamB гибнет последним.
+	kills := []stats.KillEvent{{Round: 1, Seq: 1, Time: time.Second, Killer: steamA, Victim: 6}}
+	for i, v := range []uint64{3, 4, 5, steamA, steamB} {
+		kills = append(kills, stats.KillEvent{Round: 2, Seq: i + 1, Time: time.Duration(i+2) * time.Second, Killer: 7 + uint64(i%3), Victim: v})
+	}
+	res := store.MatchResult{Map: "de_dust2", Rounds: 2, ScoreA: 1, ScoreB: 1, Players: ps, Ext: &stats.Ext{
+		FirstRound: 1, HasDamageEvents: true, HasFlashEvents: true,
+		Rounds: []stats.RoundInfo{
+			{Number: 1, Winner: parser.TeamA, SideA: parser.SideCT, EquipA: 20000, EquipB: 20000},
+			{Number: 2, Winner: parser.TeamB, SideA: parser.SideCT, EquipA: 20000, EquipB: 20000},
+		},
+		Kills: kills,
+	}}
+	if err := e.store.SaveMatchResult(ctx, m.ID, res, store.SwingSinceVersion); err != nil {
+		t.Fatal(err)
+	}
+	var match matchResponse
+	e.do(t, http.MethodGet, fmt.Sprintf("/api/matches/%d", m.ID), "", nil, &match)
+	a, b := byID(match.Players, steamA), byID(match.Players, steamB)
+	if a.Rating != b.Rating || a.Score == nil || b.Score == nil {
+		t.Fatalf("строки: %+v %+v", a, b)
+	}
+	if *a.Score <= *b.Score {
+		t.Errorf("при одинаковом Rating оценка steamA (%d) должна быть выше оценки steamB (%d): его убийство решило раунд", *a.Score, *b.Score)
 	}
 }

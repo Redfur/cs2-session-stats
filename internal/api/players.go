@@ -207,18 +207,16 @@ func (s *Server) getPlayer(w http.ResponseWriter, r *http.Request) {
 		Matches:  make([]profileMatch, 0, len(matches)),
 		OVR:      playerOVR(book, steamID),
 	}
-	if c, ok := book.Last(steamID, last20Matches); ok && c.Rounds > 0 {
-		v := stats.ScorePoints(c.Rating())
-		resp.Last20 = &v
+	if v, ok := book.Last(steamID, last20Matches); ok {
+		score := stats.ScorePoints(v)
+		resp.Last20 = &score
 	}
 	if ch, ok := book.LastSession(steamID); ok {
 		resp.LastSession = sessionChangeView(book, ch)
 	}
 	for _, p := range sessions {
 		v := aggregateView(steamID, name, p.Aggregate)
-		if ch, ok := book.Session(steamID, p.Session.ID); ok {
-			v.Change = sessionChangeView(book, ch)
-		}
+		setSessionRating(&v, book, steamID, p.Session.ID)
 		resp.Sessions = append(resp.Sessions, profileSession{Session: p.Session, PlayerView: v})
 	}
 	for _, p := range maps {
@@ -226,9 +224,7 @@ func (s *Server) getPlayer(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, p := range matches {
 		v := MatchPlayerView(stats.PlayerStats{SteamID: steamID, Name: name, Team: p.Team, Result: p.Result, Counters: p.Counters})
-		if st, ok := book.Before(steamID, p.MatchID); ok {
-			setBefore(&v, st)
-		}
+		setMatchRating(&v, book, steamID, p.MatchID)
 		resp.Matches = append(resp.Matches, profileMatch{
 			MatchID: p.MatchID, SessionID: p.SessionID, SessionDate: p.SessionDate, SessionTitle: p.SessionTitle,
 			Ordinal: p.Ordinal, Map: p.Map, ScoreA: p.ScoreA, ScoreB: p.ScoreB, PlayerView: v,

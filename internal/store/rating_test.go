@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"cs2stats/internal/stats"
 )
@@ -90,5 +91,40 @@ func saveResult(t *testing.T, s *Store, matchID int64) {
 		Players: []stats.PlayerStats{{SteamID: pA, Name: "a", Team: "A", Result: stats.Win, Counters: stats.Counters{Rounds: 10}}}}
 	if err := s.SaveMatchResult(context.Background(), matchID, r, 1); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRatingSwing(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	ids := addMatches(t, s, sess.ID, "old", "new")
+	if err := s.SaveMatchResult(ctx, ids[0], extResult(1), SwingSinceVersion-1); err != nil {
+		t.Fatal(err)
+	}
+	r := extResult(1)
+	r.Ext.Kills = append([]stats.KillEvent{{Round: 1, Seq: 2, Time: 20 * time.Second, Killer: 2, Victim: 1, Assister: 1}}, r.Ext.Kills...)
+	if err := s.SaveMatchResult(ctx, ids[1], r, SwingSinceVersion); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.RatingSwing(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got[ids[0]]; ok {
+		t.Error("у матча прежней версии данных Round Swing нет")
+	}
+	m, ok := got[ids[1]]
+	if !ok || len(m.Rounds) != 1 {
+		t.Fatalf("матч версии %d: %+v", SwingSinceVersion, m)
+	}
+	rd := m.Rounds[0]
+	if rd.Winner != "A" || rd.SideA != "CT" || rd.EquipA != 23500 || rd.EquipB != 4100 || rd.PlantMs != 40000 || len(rd.Kills) != 2 {
+		t.Fatalf("раунд: %+v", rd)
+	}
+	// убийства в порядке времени, а не номера
+	if rd.Kills[0].TimeMs != 20000 || rd.Kills[0].Killer != 2 || rd.Kills[0].Assister != 1 || rd.Kills[1].Victim != 2 {
+		t.Errorf("убийства: %+v", rd.Kills)
 	}
 }

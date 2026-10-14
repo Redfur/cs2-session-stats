@@ -289,9 +289,7 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 	}
 	players := totalsView(agg)
 	for i := range players {
-		if ch, ok := book.Session(steamIDOf(players[i]), id); ok {
-			players[i].Change = sessionChangeView(book, ch)
-		}
+		setSessionRating(&players[i], book, steamIDOf(players[i]), id)
 	}
 	writeJSON(w, http.StatusOK, sessionResponse{Session: sess, Matches: matches, Players: players, Imports: imports})
 }

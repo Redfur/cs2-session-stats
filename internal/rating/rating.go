@@ -36,9 +36,13 @@ type Step struct {
 	MatchID   int64
 	SessionID int64
 	Counters  stats.Counters
-	Before    float64 // R̄ перед матчем; не определён, если матч первый (Index == 0)
-	After     float64 // R̄ после матча
-	Index     int     // сколько матчей у игрока было до этого
+	Value     float64 // значение матча (MatchValue)
+	// Round Swing игрока за раунд; HasSwing = false, если у матча нет данных о раундах
+	Swing    float64
+	HasSwing bool
+	Before   float64 // R̄ перед матчем; не определён, если матч первый (Index == 0)
+	After    float64 // R̄ после матча
+	Index    int     // сколько матчей у игрока было до этого
 }
 
 // State — R̄ игрока (рейтинг до шкалы) и число матчей, по которым он получен.
@@ -59,11 +63,12 @@ type Book struct {
 // Build проходит матчи в порядке игры и обновляет R̄ каждого игрока:
 //
 //	w  = max(R / раунды игрока с этим матчем, 1 − (1 − α)^(R/24))
-//	R̄ ← R̄ + w·(rating матча − R̄), первый матч: R̄ = rating матча
+//	R̄ ← R̄ + w·(значение матча − R̄), первый матч: R̄ = значение матча
 //
-// Первая часть max даёт обычное среднее по сумме счётчиков, пока матчей мало,
+// Первая часть max даёт обычное среднее, взвешенное по раундам, пока матчей мало,
 // вторая — экспоненциальное затухание, при котором новые матчи весят больше.
-func Build(rows []MatchRow, p Params) *Book {
+// swings — данные Round Swing по матчам; матч без них входит по Rating 2.0.
+func Build(rows []MatchRow, swings map[int64]SwingMatch, p Params) *Book {
 	b := &Book{params: p, players: map[uint64][]Step{}}
 	rounds := map[uint64]int{}
 	for start := 0; start < len(rows); {
@@ -71,15 +76,27 @@ func Build(rows []MatchRow, p Params) *Book {
 		for end < len(rows) && rows[end].MatchID == rows[start].MatchID {
 			end++
 		}
-		// rows[start:end] — состав одного матча: союзники и соперники для будущей поправки γ
+		// rows[start:end] — состав одного матча: команды для Round Swing и будущей поправки γ
+		swing, swingRounds := map[uint64]float64(nil), 0
+		if m, ok := swings[rows[start].MatchID]; ok {
+			teams := make(map[uint64]string, end-start)
+			for _, r := range rows[start:end] {
+				teams[r.SteamID] = r.Team
+			}
+			swing, swingRounds = MatchSwing(m, teams)
+		}
 		for _, r := range rows[start:end] {
 			if r.Rounds == 0 {
 				continue
 			}
 			steps := b.players[r.SteamID]
 			rounds[r.SteamID] += r.Rounds
-			rm := r.Rating()
-			st := Step{MatchID: r.MatchID, SessionID: r.SessionID, Counters: r.Counters, Index: len(steps), After: rm}
+			st := Step{MatchID: r.MatchID, SessionID: r.SessionID, Counters: r.Counters, Index: len(steps)}
+			if swingRounds > 0 {
+				st.Swing, st.HasSwing = swing[r.SteamID]/float64(swingRounds), true
+			}
+			rm := MatchValue(r.Rating(), st.Swing, st.HasSwing)
+			st.Value, st.After = rm, rm
 			if len(steps) > 0 {
 				st.Before = steps[len(steps)-1].After
 				w := math.Max(float64(r.Rounds)/float64(rounds[r.SteamID]),
@@ -127,13 +144,14 @@ type SessionChange struct {
 	Before    State
 	HasBefore bool // false — сессия у игрока первая
 	After     State
-	Counters  stats.Counters // сумма счётчиков игрока за сессию
+	Value     float64 // значение за сессию: значения матчей, взвешенные по раундам
 }
 
 // Session — изменение R̄ игрока за сессию; ok = false, если он в ней не играл.
 func (b *Book) Session(steamID uint64, sessionID int64) (SessionChange, bool) {
 	ch := SessionChange{SessionID: sessionID}
 	found := false
+	var w weighted
 	for _, st := range b.players[steamID] {
 		if st.SessionID != sessionID {
 			continue
@@ -144,8 +162,9 @@ func (b *Book) Session(steamID uint64, sessionID int64) (SessionChange, bool) {
 			ch.Before = State{Rating: st.Before, Matches: st.Index}
 		}
 		ch.After = State{Rating: st.After, Matches: st.Index + 1}
-		ch.Counters = ch.Counters.Add(st.Counters)
+		w.add(st)
 	}
+	ch.Value = w.value()
 	return ch, found
 }
 
@@ -158,15 +177,40 @@ func (b *Book) LastSession(steamID uint64) (SessionChange, bool) {
 	return b.Session(steamID, steps[len(steps)-1].SessionID)
 }
 
-// Last — сумма счётчиков последних n матчей игрока (все, если матчей меньше).
-func (b *Book) Last(steamID uint64, n int) (stats.Counters, bool) {
+// Last — значение последних n матчей игрока (всех, если матчей меньше), взвешенное по раундам.
+func (b *Book) Last(steamID uint64, n int) (float64, bool) {
 	steps := b.players[steamID]
 	if len(steps) == 0 {
-		return stats.Counters{}, false
+		return 0, false
 	}
-	var sum stats.Counters
+	var w weighted
 	for _, st := range steps[max(0, len(steps)-n):] {
-		sum = sum.Add(st.Counters)
+		w.add(st)
 	}
-	return sum, true
+	return w.value(), true
+}
+
+// Match — шаг игрока в матче; ok = false, если игрок в нём не учтён.
+func (b *Book) Match(steamID uint64, matchID int64) (Step, bool) {
+	for _, st := range b.players[steamID] {
+		if st.MatchID == matchID {
+			return st, true
+		}
+	}
+	return Step{}, false
+}
+
+// weighted — среднее значений матчей, взвешенное по раундам.
+type weighted struct{ sum, rounds float64 }
+
+func (w *weighted) add(st Step) {
+	w.sum += st.Value * float64(st.Counters.Rounds)
+	w.rounds += float64(st.Counters.Rounds)
+}
+
+func (w weighted) value() float64 {
+	if w.rounds == 0 {
+		return 0
+	}
+	return w.sum / w.rounds
 }

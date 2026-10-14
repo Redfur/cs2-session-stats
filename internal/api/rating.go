@@ -17,6 +17,10 @@ func (s *Server) ratingBook(ctx context.Context) (*rating.Book, error) {
 	if err != nil {
 		return nil, err
 	}
+	swings, err := s.Store.RatingSwing(ctx)
+	if err != nil {
+		return nil, err
+	}
 	p := s.Rating
 	if p.Alpha == 0 {
 		p.Alpha = rating.DefaultAlpha
@@ -24,7 +28,7 @@ func (s *Server) ratingBook(ctx context.Context) (*rating.Book, error) {
 	if p.Calibration == 0 {
 		p.Calibration = 10
 	}
-	return rating.Build(rows, p), nil
+	return rating.Build(rows, swings, p), nil
 }
 
 // OVRView — общий уровень игрока: баллы, R̄ до шкалы и признак калибровки.
@@ -69,7 +73,7 @@ type SessionChangeView struct {
 func sessionChangeView(b *rating.Book, ch rating.SessionChange) *SessionChangeView {
 	v := &SessionChangeView{
 		SessionID:   ch.SessionID,
-		Score:       stats.ScorePoints(ch.Counters.Rating()),
+		Score:       stats.ScorePoints(ch.Value),
 		After:       ch.After.Score(),
 		Matches:     ch.After.Matches,
 		Calibrating: b.Calibrating(ch.After.Matches),
@@ -84,14 +88,35 @@ func sessionChangeView(b *rating.Book, ch rating.SessionChange) *SessionChangeVi
 	return v
 }
 
-// setBefore записывает в строку матча OVR игрока перед матчем и разницу оценки с ним.
-func setBefore(p *PlayerView, before rating.State) {
+// setMatchRating записывает в строку матча оценку за матч, OVR игрока перед матчем и разницу
+// оценки с ним; ok = false, если перед матчем OVR не было (первый матч игрока).
+func setMatchRating(p *PlayerView, b *rating.Book, steamID uint64, matchID int64) (before rating.State, ok bool) {
+	if st, found := b.Match(steamID, matchID); found {
+		score := stats.ScorePoints(st.Value)
+		p.Score = &score
+	}
+	before, ok = b.Before(steamID, matchID)
+	if !ok {
+		return before, false
+	}
 	v := before.Score()
 	p.Before = &v
 	if p.Score != nil {
 		vs := *p.Score - v
 		p.VsUsual = &vs
 	}
+	return before, true
+}
+
+// setSessionRating записывает в строку итогов сессии оценку за сессию и изменение OVR.
+func setSessionRating(p *PlayerView, b *rating.Book, steamID uint64, sessionID int64) {
+	ch, ok := b.Session(steamID, sessionID)
+	if !ok {
+		return
+	}
+	p.Change = sessionChangeView(b, ch)
+	score := p.Change.Score
+	p.Score = &score
 }
 
 // TeamOVRView — средний OVR команды перед матчем по игрокам, у которых он был.
@@ -121,11 +146,10 @@ func withMatchRating(b *rating.Book, matchID int64, players []PlayerView, ids []
 		if t != nil {
 			t.total++
 		}
-		st, ok := b.Before(ids[i], matchID)
+		st, ok := setMatchRating(p, b, ids[i], matchID)
 		if !ok {
 			continue
 		}
-		setBefore(p, st)
 		if t != nil {
 			t.sum += st.Rating
 			t.rated++
