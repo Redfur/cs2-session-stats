@@ -20,8 +20,8 @@
 
 ## 4. Интерфейс
 
-- [ ] 4.1 Подсказки OVR и «Оценка» в `web/src/components/playerColumns.tsx`, `scoreColumns.tsx`, `PlayerPage.tsx`, подпись под таблицей игроков; `npx tsc -b --noEmit`, `npm run lint`, проверка headless-Chromium: тексты на месте, экраны без изменений вёрстки
-- [ ] 4.2 README: раздел о Round Swing (что учитывается, бесполезные убийства, клатчи, экономика, допущения модели); проверка — описание совпадает с design
+- [x] 4.1 Подсказки OVR и «Оценка» в `web/src/components/playerColumns.tsx`, `scoreColumns.tsx`, `PlayerPage.tsx`, подпись под таблицей игроков; `npx tsc -b --noEmit`, `npm run lint`, проверка headless-Chromium: тексты на месте, экраны без изменений вёрстки
+- [x] 4.2 README: раздел о Round Swing (что учитывается, бесполезные убийства, клатчи, экономика, допущения модели); проверка — описание совпадает с design
 
 ## 5. Проверка целиком
 

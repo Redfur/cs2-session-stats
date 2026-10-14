@@ -201,7 +201,8 @@ export function PlayersPage() {
                       minWidth={PLAYERS_PAGE_MIN_WIDTH}
                     />
                     <CardFooter className="text-small text-fg-muted">
-                      OVR — общий уровень по всем матчам игрока, от периода не зависит; Rating — за выбранный период.
+                      OVR — общий уровень по всем матчам игрока: Rating 2.0 и вклад в исход раундов, от периода не
+                      зависит; Rating — за выбранный период.
                       Пунктирная рамка и «5/10» — калибровка: меньше {rows[0].ovr?.calibrationMatches ?? 10} матчей.
                     </CardFooter>
                   </>

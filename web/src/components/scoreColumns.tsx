@@ -11,7 +11,7 @@ const FIRST_SESSION = 'Первая сессия игрока — сравнив
 const score: Column<PlayerRow> = {
   key: 'score',
   label: 'Оценка',
-  title: 'Оценка за сессию, 0–100',
+  title: 'Оценка за сессию, 0–100: Rating 2.0 и вклад в исход раундов',
   numeric: true,
   value: (p) => p.score ?? -1,
   render: (p) => p.score !== undefined && <ScoreBadge score={p.score} />,

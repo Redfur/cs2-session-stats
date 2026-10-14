@@ -79,7 +79,7 @@ export const PLAYER_TOTAL_MIN_WIDTH = 960
 const ovrColumn: Column<PlayerRow> = {
   key: 'ovr',
   label: 'OVR',
-  title: 'Общий уровень по всем матчам игрока, последние весят больше. От периода не зависит',
+  title: 'Общий уровень по всем матчам игрока: Rating 2.0 и вклад в исход раундов, последние матчи весят больше. От периода не зависит',
   numeric: true,
   width: 92,
   value: (p) => p.ovr?.score ?? -1,
@@ -108,7 +108,7 @@ export const PLAYERS_PAGE_MIN_WIDTH = PLAYER_TOTAL_MIN_WIDTH + 92
 const matchScoreColumn: Column<PlayerRow> = {
   key: 'score',
   label: 'Оценка',
-  title: 'Оценка за матч, 0–100. Иконка — лучше или хуже обычного: оценка против OVR перед матчем',
+  title: 'Оценка за матч, 0–100: Rating 2.0 и вклад в исход раундов. Иконка — лучше или хуже обычного: оценка против OVR перед матчем',
   numeric: true,
   width: 88,
   value: (p) => p.score ?? -1,

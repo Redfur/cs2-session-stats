@@ -58,7 +58,7 @@ const SESSION_COLUMNS: Column<ProfileSession>[] = [
   {
     key: 'score',
     label: 'Оценка',
-    title: 'Оценка за сессию, 0–100. Иконка — лучше или хуже обычного',
+    title: 'Оценка за сессию, 0–100: Rating 2.0 и вклад в исход раундов. Иконка — лучше или хуже обычного',
     numeric: true,
     width: 88,
     value: (s) => s.score ?? -1,
@@ -157,7 +157,7 @@ const MATCH_COLUMNS: Column<ProfileMatch>[] = [
   {
     key: 'score',
     label: 'Оценка',
-    title: 'Оценка за матч, 0–100. Иконка — лучше или хуже обычного',
+    title: 'Оценка за матч, 0–100: Rating 2.0 и вклад в исход раундов. Иконка — лучше или хуже обычного',
     numeric: true,
     width: 88,
     value: (m) => m.score ?? -1,
@@ -288,7 +288,7 @@ function RatingTiles({ data, sessions }: { data: PlayerProfile; sessions: Sessio
   const lastSess = ls && sessions.find((s) => s.id === ls.sessionId)
   return (
     <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-4">
-      <RatingTile label="OVR" className="col-span-2 md:col-span-1" sub="по всем матчам игрока, последние весят больше">
+      <RatingTile label="OVR" className="col-span-2 md:col-span-1" sub="Rating 2.0 и вклад в исход раундов, последние матчи весят больше">
         <ScoreBadge
           score={ovr.score}
           size="xl"
