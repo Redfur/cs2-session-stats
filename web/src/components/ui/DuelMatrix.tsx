@@ -11,6 +11,8 @@ interface DuelMatrixProps {
   // session — союзники те, кто ни разу не играл друг против друга (нет ячейки)
   context: 'match' | 'session'
   labelledBy: string
+  // адрес профиля игрока
+  playerHref: (steamId: string) => string
 }
 
 type Hover = { r: number; c: number } | null
@@ -26,7 +28,7 @@ const CROSS = 'bg-[image:linear-gradient(rgb(231_233_237/0.045),rgb(231_233_237/
 
 // DuelMatrix — матрица «кто кого убивал»: строка — убийца, столбец — жертва.
 // В ячейке убийства строки и её доля в паре, полоска — доля, цвет — ступень шкалы.
-export function DuelMatrix({ players, cells, context, labelledBy }: DuelMatrixProps) {
+export function DuelMatrix({ players, cells, context, labelledBy, playerHref }: DuelMatrixProps) {
   const [hover, setHover] = useState<Hover>(null)
   const ref = useRef<HTMLDivElement>(null)
   const byPair = new Map(cells.map((c) => [`${c.killerId}|${c.victimId}`, c]))
@@ -87,7 +89,7 @@ export function DuelMatrix({ players, cells, context, labelledBy }: DuelMatrixPr
                   <span className={cx('size-2.5 flex-none rounded-[3px]', killer.team === 'A' ? 'bg-team-a' : 'bg-team-b')} aria-hidden />
                 )}
                 <Link
-                  to={`/players/${killer.steamId}`}
+                  to={playerHref(killer.steamId)}
                   title={killer.name}
                   className="focus-ring min-w-0 truncate font-semibold text-fg hover:text-accent-hover"
                 >

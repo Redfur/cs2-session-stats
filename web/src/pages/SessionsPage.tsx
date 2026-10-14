@@ -1,7 +1,7 @@
 import { CalendarPlus, ChevronRight, Plus, Search, TriangleAlert } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { api, todayISO, type SessionSummary } from '../api'
+import { api, ApiError, todayISO, type SessionSummary } from '../api'
 import { PageError, PageLoading } from '../components/PageState'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -12,7 +12,9 @@ import { Field, Input } from '../components/ui/Field'
 import { Page } from '../components/ui/Layout'
 import { PageHeader } from '../components/ui/PageHeader'
 import { formatDateLong, formatDateShort, formatMonth, formatWeekday, plural } from '../format'
+import { paths, useGroupId } from '../groups'
 import { metricLevel } from '../metrics'
+import { NotFoundPage } from './NotFoundPage'
 
 // Строка поиска совпадает с названием или датой в любом из видов: 2026-10-09, 09.10.2026, 9 октября 2026.
 function matches(s: SessionSummary, q: string): boolean {
@@ -21,20 +23,35 @@ function matches(s: SessionSummary, q: string): boolean {
 }
 
 export function SessionsPage() {
+  const gid = useGroupId()
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null)
   const [error, setError] = useState('')
+  const [notFound, setNotFound] = useState(false)
   const [q, setQ] = useState('')
   const [creating, setCreating] = useState(false)
 
+  // при смене группы прежний список не показывается
+  const [prevGid, setPrevGid] = useState(gid)
+  if (gid !== prevGid) {
+    setPrevGid(gid)
+    setSessions(null)
+    setError('')
+    setNotFound(false)
+    setQ('')
+  }
+
   const load = useCallback(() => {
-    api.listSessions().then(
+    api.listSessions(gid).then(
       (list) => {
         setSessions(list)
         setError('')
       },
-      (e: Error) => setError(e.message),
+      (e: Error) => {
+        setNotFound(e instanceof ApiError && e.status === 404)
+        setError(e.message)
+      },
     )
-  }, [])
+  }, [gid])
   useEffect(load, [load])
 
   const groups = useMemo(() => {
@@ -50,7 +67,9 @@ export function SessionsPage() {
     return out
   }, [sessions, q])
 
-  if (error && !sessions) return <PageError title="Не удалось загрузить сессии" error={error} onRetry={load} back={{ to: '/players', label: 'К игрокам' }} />
+  if (notFound) return <NotFoundPage />
+  if (error && !sessions)
+    return <PageError title="Не удалось загрузить сессии" error={error} onRetry={load} back={{ to: paths.players(gid), label: 'К игрокам' }} />
   if (!sessions) return <PageLoading />
 
   const totalMatches = sessions.reduce((n, s) => n + s.matchCount, 0)
@@ -65,23 +84,21 @@ export function SessionsPage() {
       <PageHeader
         title="Сессии"
         meta={
-          sessions.length > 0 && (
-            <span className="tabular-nums">
-              {plural(sessions.length, ['вечер', 'вечера', 'вечеров'])} · {plural(totalMatches, ['матч', 'матча', 'матчей'])}
-            </span>
-          )
+          <span className="tabular-nums">
+            {sessions.length > 0
+              ? `${plural(sessions.length, ['вечер', 'вечера', 'вечеров'])} · ${plural(totalMatches, ['матч', 'матча', 'матчей'])}`
+              : 'пока ни одного вечера'}
+          </span>
         }
         actions={
-          sessions.length > 0 && (
-            <>
-              <label className="relative flex w-full items-center sm:w-[280px]">
-                <Search className="pointer-events-none absolute left-[11px] size-4 text-fg-muted" aria-hidden />
-                <span className="sr-only">Найти вечер</span>
-                <Input type="search" className="pl-9" placeholder="Название или дата" value={q} onChange={(e) => setQ(e.target.value)} />
-              </label>
-              {newButton}
-            </>
-          )
+          <>
+            <label className="relative flex w-full items-center sm:w-[280px]">
+              <Search className="pointer-events-none absolute left-[11px] size-4 text-fg-muted" aria-hidden />
+              <span className="sr-only">Найти вечер</span>
+              <Input type="search" className="pl-9" placeholder="Название или дата" value={q} onChange={(e) => setQ(e.target.value)} />
+            </label>
+            {newButton}
+          </>
         }
       />
 
@@ -89,8 +106,9 @@ export function SessionsPage() {
         <Card as="div">
           <EmptyState
             icon={<CalendarPlus />}
-            title="Сессий пока нет"
-            text="Сессия — это вечер игр. Создайте её и загрузите демки матчей."
+            className="py-14"
+            title="Создайте первую сессию"
+            text="Сессия — один игровой вечер. Создайте её, загрузите демки матчей, и игроки группы появятся сами."
             actions={newButton}
           />
         </Card>
@@ -101,7 +119,7 @@ export function SessionsPage() {
           <h2 className="m-0 text-over font-bold uppercase text-fg-muted">{g.month}</h2>
           <Card as="div">
             {g.items.map((s) => (
-              <SessionRow key={s.id} s={s} />
+              <SessionRow key={s.id} s={s} gid={gid} />
             ))}
           </Card>
         </section>
@@ -122,16 +140,16 @@ export function SessionsPage() {
         </Card>
       )}
 
-      <NewSessionDialog open={creating} onClose={() => setCreating(false)} />
+      <NewSessionDialog gid={gid} open={creating} onClose={() => setCreating(false)} />
     </Page>
   )
 }
 
-function SessionRow({ s }: { s: SessionSummary }) {
+function SessionRow({ s, gid }: { s: SessionSummary; gid: string }) {
   const errors = s.failedCount > 0 && plural(s.failedCount, ['ошибка', 'ошибки', 'ошибок'])
   return (
     <Link
-      to={`/sessions/${s.id}`}
+      to={paths.session(gid, s.id)}
       className="focus-ring grid grid-cols-[44px_minmax(0,1fr)_16px] items-center gap-3 rounded-none border-t border-border px-4 py-3 text-fg first:border-t-0 hover:bg-surface-hover hover:text-fg hover:no-underline md:grid-cols-[52px_minmax(0,1fr)_auto_20px] md:gap-[18px] md:px-5 md:py-3.5"
     >
       <span className="flex size-11 flex-col items-center justify-center rounded-[10px] border border-border bg-surface-2 md:size-[52px]">
@@ -183,7 +201,7 @@ function SessionRow({ s }: { s: SessionSummary }) {
   )
 }
 
-function NewSessionDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function NewSessionDialog({ gid, open, onClose }: { gid: string; open: boolean; onClose: () => void }) {
   const [date, setDate] = useState(todayISO)
   const [title, setTitle] = useState('')
   const navigate = useNavigate()
@@ -203,8 +221,8 @@ function NewSessionDialog({ open, onClose }: { open: boolean; onClose: () => voi
       submitLabel="Создать"
       errorTitle="Не удалось создать сессию."
       onSubmit={async () => {
-        const s = await api.createSession(date, title)
-        navigate(`/sessions/${s.id}`)
+        const s = await api.createSession(gid, date, title)
+        navigate(paths.session(gid, s.id))
       }}
     >
       <Field label="Дата" htmlFor="ns-date">

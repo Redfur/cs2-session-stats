@@ -58,11 +58,11 @@ export function periodText(p: Period): string {
   return 'за всё время'
 }
 
-// useSessionList загружает список сессий для выбора в фильтре.
-export function useSessionList(): SessionSummary[] {
+// useSessionList загружает сессии группы для выбора в фильтре.
+export function useSessionList(gid: string): SessionSummary[] {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   useEffect(() => {
-    api.listSessions().then(setSessions, () => setSessions([]))
-  }, [])
+    api.listSessions(gid).then(setSessions, () => setSessions([]))
+  }, [gid])
   return sessions
 }

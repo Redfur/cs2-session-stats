@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { api, isImportActive, type Import, type UploadResult } from '../api'
 import { formatBytes, formatBytesOf } from '../format'
+import { paths, useGroupId } from '../groups'
 import { Badge } from './ui/Badge'
 import { Button } from './ui/Button'
 import { ProgressBar } from './ui/ProgressBar'
@@ -20,14 +21,14 @@ const SERVER_NOTE = 'качаем на сервере, вкладку можно
 
 const platformTitle: Record<string, string> = { fastcup: 'FastCup', cybershoke: 'Cybershoke' }
 
-function resultLine(r: UploadResult, i: number, many: boolean, ordinalOf: ImportListProps['ordinalOf']): ReactNode {
+function resultLine(r: UploadResult, i: number, many: boolean, gid: string, ordinalOf: ImportListProps['ordinalOf']): ReactNode {
   const map = many ? `Карта ${i + 1}` : 'Демка'
   const ordinal = r.matchId ? ordinalOf(r.matchId) : undefined
   if (r.status === 'accepted')
     return (
       <>
         {map} →{' '}
-        <Link to={`/matches/${r.matchId}`} className="focus-ring">
+        <Link to={paths.match(gid, r.matchId ?? 0)} className="focus-ring">
           матч{ordinal ? ` #${ordinal}` : ''}
         </Link>
       </>
@@ -36,7 +37,7 @@ function resultLine(r: UploadResult, i: number, many: boolean, ordinalOf: Import
     return (
       <>
         {map} уже загружена —{' '}
-        <Link to={`/matches/${r.matchId}`} className="focus-ring">
+        <Link to={paths.anyMatch(r.matchId ?? 0)} className="focus-ring">
           {ordinal ? `матч #${ordinal}` : 'открыть матч'}
         </Link>
       </>
@@ -50,6 +51,7 @@ function resultLine(r: UploadResult, i: number, many: boolean, ordinalOf: Import
 
 // ImportList — загрузки по ссылкам на матчи: сервер скачивает демки сам, страница показывает прогресс и итог.
 export function ImportList({ imports, ordinalOf, onChanged, onError }: ImportListProps) {
+  const gid = useGroupId()
   const [busy, setBusy] = useState<number | null>(null)
   if (imports.length === 0) return null
   const active = imports.filter(isImportActive).length
@@ -155,7 +157,7 @@ export function ImportList({ imports, ordinalOf, onChanged, onError }: ImportLis
               {results.length > 0 && (
                 <ul className="m-0 mt-1 flex list-none flex-col gap-0.5 p-0 text-small text-fg-muted">
                   {results.map((r, i) => (
-                    <li key={i}>{resultLine(r, i, many, ordinalOf)}</li>
+                    <li key={i}>{resultLine(r, i, many, gid, ordinalOf)}</li>
                   ))}
                 </ul>
               )}

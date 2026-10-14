@@ -2,6 +2,7 @@ import { ChevronDown, Info, Swords } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, type MatchDuels, type PlayerDuels, type SessionDuels } from '../api'
 import { plural } from '../format'
+import { paths, useGroupId } from '../groups'
 import { Alert } from './ui/Alert'
 import { Badge } from './ui/Badge'
 import { Button } from './ui/Button'
@@ -107,6 +108,7 @@ export function MatchDuelsCard({
   reparsing: boolean
   onReparse: () => Promise<void>
 }) {
+  const gid = useGroupId()
   const { data, error, reload } = useDuels<MatchDuels>(() => api.getMatchDuels(matchId), `${matchId}|${version}`)
   const [busy, setBusy] = useState(false)
   return (
@@ -134,7 +136,7 @@ export function MatchDuelsCard({
         />
       ) : (
         <>
-          <DuelMatrix players={data.players} cells={data.cells} context="match" labelledBy="duels-h" />
+          <DuelMatrix players={data.players} cells={data.cells} context="match" labelledBy="duels-h" playerHref={(id) => paths.player(gid, id)} />
           <CardFooter>
             <DuelLegend allies="союзники" />
           </CardFooter>
@@ -177,6 +179,7 @@ export function SessionDuelsCard({
   reparsing: boolean
   onReparse: (ids: number[]) => Promise<void>
 }) {
+  const gid = useGroupId()
   const { data, error, reload } = useDuels<SessionDuels>(() => api.getSessionDuels(sessionId), `${sessionId}|${version}`)
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const [busy, setBusy] = useState(false)
@@ -257,7 +260,13 @@ export function SessionDuelsCard({
                   {reparseButton('Пересчитать их', true)}
                 </div>
               )}
-              <DuelMatrix players={data.players} cells={data.cells} context="session" labelledBy="duels-h" />
+              <DuelMatrix
+                players={data.players}
+                cells={data.cells}
+                context="session"
+                labelledBy="duels-h"
+                playerHref={(id) => paths.player(gid, id)}
+              />
               <CardFooter>
                 <DuelLegend allies="весь вечер в одной команде" />
               </CardFooter>
@@ -271,7 +280,8 @@ export function SessionDuelsCard({
 
 // RivalsCard — «Соперники» в профиле: у кого игрок выигрывает дуэли и кому проигрывает (по доле в паре).
 export function RivalsCard({ steamId, name, query }: { steamId: string; name: string; query: string }) {
-  const { data, error, reload } = useDuels<PlayerDuels>(() => api.getPlayerDuels(steamId, query), `${steamId}|${query}`)
+  const gid = useGroupId()
+  const { data, error, reload } = useDuels<PlayerDuels>(() => api.getPlayerDuels(gid, steamId, query), `${gid}|${steamId}|${query}`)
   const partial = data?.status === 'partial'
   let body: ReactNode
   if (error) body = <DuelsError onRetry={reload} />
@@ -284,6 +294,7 @@ export function RivalsCard({ steamId, name, query }: { steamId: string; name: st
   else
     body = (
       <Rivals
+        playerHref={(id) => paths.player(gid, id)}
         groups={[
           { title: 'Выигрывает дуэли у', list: data.beats, by: 'kills', empty: 'Нет пар с долей выше 50%' },
           { title: 'Проигрывает дуэли', list: data.losesTo, by: 'deaths', empty: 'Нет пар с долей ниже 50%' },

@@ -1,8 +1,19 @@
 import type { HTMLAttributes, ReactNode } from 'react'
 import { cx } from './cx'
 
-export function Card({ className, as: Tag = 'section', ...rest }: HTMLAttributes<HTMLElement> & { as?: 'section' | 'div' | 'aside' }) {
-  return <Tag className={cx('overflow-hidden rounded-lg border border-border bg-surface', className)} {...rest} />
+// danger — карточка необратимых действий («Опасная зона»): красноватая рамка.
+export function Card({
+  className,
+  as: Tag = 'section',
+  danger = false,
+  ...rest
+}: HTMLAttributes<HTMLElement> & { as?: 'section' | 'div' | 'aside'; danger?: boolean }) {
+  return (
+    <Tag
+      className={cx('overflow-hidden rounded-lg border bg-surface', danger ? 'border-metric-bad/30' : 'border-border', className)}
+      {...rest}
+    />
+  )
 }
 
 interface CardHeaderProps {

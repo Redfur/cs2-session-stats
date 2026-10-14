@@ -10,6 +10,8 @@ interface InlineEditProps {
   value: string
   label: string
   placeholder?: string
+  // ограничение длины названия; по умолчанию 200
+  maxLength?: number
   icon?: ReactNode
   onSave: (value: string) => Promise<void>
   onDone: () => void
@@ -17,7 +19,7 @@ interface InlineEditProps {
 
 // InlineEdit — правка одного поля на месте: Enter или ✓ сохраняет, Esc или ✕ отменяет.
 // При ошибке поле остаётся открытым и показывает текст ошибки под собой.
-export function InlineEdit({ kind, value: initial, label, placeholder, icon, onSave, onDone }: InlineEditProps) {
+export function InlineEdit({ kind, value: initial, label, placeholder, maxLength = 200, icon, onSave, onDone }: InlineEditProps) {
   const [value, setValue] = useState(initial)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -48,7 +50,7 @@ export function InlineEdit({ kind, value: initial, label, placeholder, icon, onS
           id={id}
           type={title ? 'text' : 'date'}
           required={!title}
-          maxLength={title ? 200 : undefined}
+          maxLength={title ? maxLength : undefined}
           autoFocus
           value={value}
           placeholder={placeholder}

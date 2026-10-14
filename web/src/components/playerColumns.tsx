@@ -1,8 +1,8 @@
-import { Link } from 'react-router'
 import type { PlayerRow } from '../api'
 import { formatPct } from '../metrics'
 import type { SortState } from '../sort'
 import { CalibrationCount, ScoreBadge, ScoreWithUsual } from './ui/Rating'
+import { PlayerLink } from './GroupLink'
 import { rowLinkClass, type Column } from './ui/StatTable'
 
 // Общее описание колонок игрока: итоги сессии, таблицы матча, общая таблица и итоги профиля.
@@ -12,9 +12,9 @@ export const playerNameColumn: Column<PlayerRow> = {
   label: 'Игрок',
   value: (p) => p.name,
   render: (p) => (
-    <Link to={`/players/${p.steamId}`} className={rowLinkClass}>
+    <PlayerLink steamId={p.steamId} className={rowLinkClass}>
       {p.name}
-    </Link>
+    </PlayerLink>
   ),
 }
 

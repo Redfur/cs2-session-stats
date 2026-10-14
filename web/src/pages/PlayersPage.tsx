@@ -15,6 +15,7 @@ import { PageHeader } from '../components/ui/PageHeader'
 import { SortHint, StatTable } from '../components/ui/StatTable'
 import { updateParams } from '../filters'
 import { plural } from '../format'
+import { paths, useGroupId } from '../groups'
 import { periodText, usePeriod, useSessionList } from '../period'
 import { sortRows, useSort } from '../sort'
 
@@ -25,7 +26,8 @@ export function PlayersPage() {
   const [players, setPlayers] = useState<PlayerRow[] | null>(null)
   const [options, setOptions] = useState<PlayerRow[]>([])
   const [error, setError] = useState('')
-  const sessions = useSessionList()
+  const gid = useGroupId()
+  const sessions = useSessionList(gid)
   const period = usePeriod(params, setParams)
   const { sort, toggle } = useSort('sort', PLAYERS_PAGE_COLUMNS, RATING_DESC)
 
@@ -43,7 +45,7 @@ export function PlayersPage() {
 
   useEffect(() => {
     let stale = false
-    api.listPlayers(query).then(
+    api.listPlayers(gid, query).then(
       (r) => {
         if (stale) return
         setPlayers(r.players)
@@ -54,15 +56,15 @@ export function PlayersPage() {
     return () => {
       stale = true
     }
-  }, [query])
+  }, [gid, query])
 
   // варианты мультивыбора — все игроки без фильтров
   useEffect(() => {
-    api.listPlayers('').then(
+    api.listPlayers(gid, '').then(
       (r) => setOptions([...r.players].sort((a, b) => a.name.localeCompare(b.name, 'ru', { sensitivity: 'base' }))),
       () => setOptions([]),
     )
-  }, [])
+  }, [gid])
 
   function togglePlayer(id: string) {
     update((p) => {
@@ -212,7 +214,7 @@ export function PlayersPage() {
                     title="Данных пока нет"
                     text="Таблица появится, когда в сессиях будут обработанные матчи."
                     actions={
-                      <ButtonLink to="/" variant="secondary" size="sm">
+                      <ButtonLink to={paths.sessions(gid)} variant="secondary" size="sm">
                         К сессиям
                       </ButtonLink>
                     }

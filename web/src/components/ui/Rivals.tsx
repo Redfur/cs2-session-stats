@@ -19,7 +19,8 @@ const cardsText = (n: number) => `на ${plural(n, ['карте', 'картах'
 
 // Rivals — два показателя профиля: соперники с наибольшей и наименьшей долей дуэлей.
 // Счёт «убил : погиб» и доля — со стороны владельца профиля.
-export function Rivals({ groups }: { groups: RivalGroup[] }) {
+// playerHref — адрес профиля соперника.
+export function Rivals({ groups, playerHref }: { groups: RivalGroup[]; playerHref: (steamId: string) => string }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2">
       {groups.map((g, gi) => (
@@ -41,7 +42,7 @@ export function Rivals({ groups }: { groups: RivalGroup[] }) {
                 key={o.steamId}
                 className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-0.5 border-t border-border py-[7px] first:border-t-0 md:grid-cols-[minmax(0,1fr)_auto_88px]"
               >
-                <Link to={`/players/${o.steamId}`} title={o.name} className="focus-ring block min-w-0 truncate font-semibold text-fg hover:text-accent-hover">
+                <Link to={playerHref(o.steamId)} title={o.name} className="focus-ring block min-w-0 truncate font-semibold text-fg hover:text-accent-hover">
                   {o.name}
                 </Link>
                 <span

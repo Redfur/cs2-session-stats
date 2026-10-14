@@ -2,6 +2,7 @@ import { GripVertical, Trash } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from 'react'
 import { Link } from 'react-router'
 import type { Match } from '../api'
+import { paths, useGroupId } from '../groups'
 import { StatusBadge } from './ui/Badge'
 import { Button } from './ui/Button'
 import { cx } from './ui/cx'
@@ -34,6 +35,7 @@ const DRAG_THRESHOLD = 4
 // MatchesTable — список матчей сессии. Матч перетаскивается за ручку (мышь, тач — Pointer Events)
 // на любую позицию, Esc отменяет перетаскивание. С клавиатуры на ручке ↑/↓ сдвигают матч на одну позицию.
 export function MatchesTable({ matches, onMove, onDelete, movedId, labelledBy }: MatchesTableProps) {
+  const gid = useGroupId()
   const rows = useRef(new Map<number, HTMLTableRowElement>())
   const grips = useRef(new Map<number, HTMLButtonElement>())
   const [drag, setDrag] = useState<DragState | null>(null)
@@ -143,7 +145,7 @@ export function MatchesTable({ matches, onMove, onDelete, movedId, labelledBy }:
         <tbody>
           {matches.map((m, i) => {
             const n = i + 1
-            const href = `/matches/${m.id}`
+            const href = paths.match(gid, m.id)
             const line =
               lineAt === i
                 ? '[&>td]:shadow-[inset_0_2px_0_var(--color-accent)]'

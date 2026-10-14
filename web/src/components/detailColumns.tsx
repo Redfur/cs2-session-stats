@@ -1,8 +1,8 @@
-import { Link } from 'react-router'
 import type { DetailRow, PlayerRow } from '../api'
 import { fmt1, fmtPct, fmtSigned } from '../ext'
 import { NotComputed } from './ui/ExtValue'
 import { MetricValue } from './ui/MetricValue'
+import { PlayerLink } from './GroupLink'
 import { rowLinkClass, type Column } from './ui/StatTable'
 
 // Подробные колонки игрока: базовая строка и расширенные счётчики. Новые показатели шкалой не окрашиваются.
@@ -30,9 +30,9 @@ export function detailColumns(kind: 'match' | 'session', r: DetailReasons): Colu
       label: 'Игрок',
       value: (p) => p.name,
       render: (p) => (
-        <Link to={`/players/${p.steamId}`} className={rowLinkClass}>
+        <PlayerLink steamId={p.steamId} className={rowLinkClass}>
           {p.name}
-        </Link>
+        </PlayerLink>
       ),
     },
     kind === 'session' && {

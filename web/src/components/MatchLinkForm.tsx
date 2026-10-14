@@ -3,6 +3,7 @@ import { useId, useState, type ClipboardEvent, type FormEvent, type ReactNode } 
 import { Link } from 'react-router'
 import { api, type ImportAddResult } from '../api'
 import { formatDateLong } from '../format'
+import { paths, useGroupId } from '../groups'
 import { Button } from './ui/Button'
 import { cx } from './ui/cx'
 import { Input, Label } from './ui/Field'
@@ -29,7 +30,7 @@ function sessionLabel(r: ImportAddResult) {
   return r.sessionTitle || (r.sessionDate ? formatDateLong(r.sessionDate) : 'другой сессии')
 }
 
-function noteOf(r: ImportAddResult, sessionId: string, many: boolean): Note | null {
+function noteOf(r: ImportAddResult, sessionId: string, gid: string, many: boolean): Note | null {
   const here = String(r.sessionId) === sessionId
   switch (r.status) {
     case 'error':
@@ -40,7 +41,7 @@ function noteOf(r: ImportAddResult, sessionId: string, many: boolean): Note | nu
         text: here ? (
           <>
             Матч {matchNumber(r)} уже есть в сессии —{' '}
-            <Link to={`/matches/${r.matchId}`} className="focus-ring">
+            <Link to={paths.match(gid, r.matchId ?? 0)} className="focus-ring">
               матч #{r.ordinal}
             </Link>
             . Повторно не добавлен.
@@ -48,7 +49,7 @@ function noteOf(r: ImportAddResult, sessionId: string, many: boolean): Note | nu
         ) : (
           <>
             Матч {matchNumber(r)} уже есть в сессии «{sessionLabel(r)}» —{' '}
-            <Link to={`/matches/${r.matchId}`} className="focus-ring">
+            <Link to={paths.anyMatch(r.matchId ?? 0)} className="focus-ring">
               открыть матч
             </Link>
             . Повторно не добавлен.
@@ -63,7 +64,7 @@ function noteOf(r: ImportAddResult, sessionId: string, many: boolean): Note | nu
         ) : (
           <>
             Матч {matchNumber(r)} уже скачивается в сессии{' '}
-            <Link to={`/sessions/${r.sessionId}`} className="focus-ring">
+            <Link to={paths.anySession(r.sessionId ?? 0)} className="focus-ring">
               «{sessionLabel(r)}»
             </Link>
             .
@@ -81,6 +82,7 @@ function noteOf(r: ImportAddResult, sessionId: string, many: boolean): Note | nu
 // В поле можно вставить несколько ссылок через пробел или с новой строки.
 export function MatchLinkForm({ sessionId, variant, onAdded }: MatchLinkFormProps) {
   const id = useId()
+  const gid = useGroupId()
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [notes, setNotes] = useState<Note[]>([])
@@ -95,7 +97,7 @@ export function MatchLinkForm({ sessionId, variant, onAdded }: MatchLinkFormProp
     try {
       const results = await api.addImports(sessionId, value)
       const many = results.length > 1
-      setNotes(results.flatMap((r) => noteOf(r, sessionId, many) ?? []))
+      setNotes(results.flatMap((r) => noteOf(r, sessionId, gid, many) ?? []))
       // в поле остаются только отклонённые ссылки — их можно поправить и отправить снова
       setValue(
         results

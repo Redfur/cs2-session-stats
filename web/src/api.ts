@@ -4,8 +4,23 @@ import { formatDateLong } from './format'
 
 export type MatchStatus = 'pending' | 'parsing' | 'done' | 'failed'
 
+// Group — компания: свои сессии, статистика и рейтинг.
+export interface Group {
+  id: number
+  name: string
+  createdAt: string
+  sessionCount: number
+}
+
+// GroupSummary — группа со сводкой по матчам с результатом.
+export interface GroupSummary extends Group {
+  matchCount: number
+  playerCount: number
+}
+
 export interface Session {
   id: number
+  groupId: number
   date: string
   title: string
   createdAt: string
@@ -155,6 +170,8 @@ export interface ImportAddResult {
 }
 
 export interface MatchDetails {
+  // группа сессии матча
+  groupId: number
   match: Match
   players: PlayerRow[]
   teams: { A?: TeamOVR; B?: TeamOVR }
@@ -444,6 +461,15 @@ export interface SessionExt extends ExtHeader {
   players: DetailRow[]
 }
 
+// ApiError — ответ сервера с ошибкой: текст и HTTP-статус.
+export class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const resp = await fetch(url, {
     method,
@@ -452,15 +478,21 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   })
   const data = await resp.json().catch(() => null)
   if (!resp.ok) {
-    throw new Error(data?.error ?? `HTTP ${resp.status}`)
+    throw new ApiError(data?.error ?? `HTTP ${resp.status}`, resp.status)
   }
   return data as T
 }
 
 export const api = {
-  listSessions: () => request<SessionSummary[]>('GET', '/api/sessions'),
-  createSession: (date: string, title: string) =>
-    request<Session>('POST', '/api/sessions', { date, title }),
+  listGroups: () => request<Group[]>('GET', '/api/groups'),
+  createGroup: (name: string) => request<Group>('POST', '/api/groups', { name }),
+  getGroup: (gid: string) => request<GroupSummary>('GET', `/api/groups/${gid}`),
+  renameGroup: (gid: string, name: string) => request<Group>('PATCH', `/api/groups/${gid}`, { name }),
+  // удаляет группу без сессий; у группы с сессиями — ошибка 409
+  deleteGroup: (gid: string) => request<void>('DELETE', `/api/groups/${gid}`),
+  listSessions: (gid: string) => request<SessionSummary[]>('GET', `/api/groups/${gid}/sessions`),
+  createSession: (gid: string, date: string, title: string) =>
+    request<Session>('POST', `/api/groups/${gid}/sessions`, { date, title }),
   getSession: (id: string) => request<SessionDetails>('GET', `/api/sessions/${id}`),
   updateSession: (id: string, date: string, title: string) =>
     request<Session>('PATCH', `/api/sessions/${id}`, { date, title }),
@@ -474,14 +506,19 @@ export const api = {
   reparseMatch: (id: string | number) => request<Match>('POST', `/api/matches/${id}/reparse`),
   reparseSession: (id: string) => request<{ queued: number }>('POST', `/api/sessions/${id}/reparse`),
   // query — строка параметров фильтра без «?» (from, to, session, player, together, minMatches)
-  listPlayers: (query: string) => request<PlayersResponse>('GET', `/api/players?${query}`),
-  getPlayer: (steamId: string, query: string) => request<PlayerProfile>('GET', `/api/players/${steamId}?${query}`),
+  listPlayers: (gid: string, query: string) => request<PlayersResponse>('GET', `/api/groups/${gid}/players?${query}`),
+  getPlayer: (gid: string, steamId: string, query: string) =>
+    request<PlayerProfile>('GET', `/api/groups/${gid}/players/${steamId}?${query}`),
   getMatchDuels: (id: string | number) => request<MatchDuels>('GET', `/api/matches/${id}/duels`),
   getSessionDuels: (id: string | number) => request<SessionDuels>('GET', `/api/sessions/${id}/duels`),
-  getPlayerDuels: (steamId: string, query: string) => request<PlayerDuels>('GET', `/api/players/${steamId}/duels?${query}`),
-  getPlayerFight: (steamId: string, query: string) => request<PlayerFight>('GET', `/api/players/${steamId}/fight?${query}`),
-  getPlayerWeapons: (steamId: string, query: string) => request<PlayerWeapons>('GET', `/api/players/${steamId}/weapons?${query}`),
-  getPlayerUtility: (steamId: string, query: string) => request<PlayerUtility>('GET', `/api/players/${steamId}/utility?${query}`),
+  getPlayerDuels: (gid: string, steamId: string, query: string) =>
+    request<PlayerDuels>('GET', `/api/groups/${gid}/players/${steamId}/duels?${query}`),
+  getPlayerFight: (gid: string, steamId: string, query: string) =>
+    request<PlayerFight>('GET', `/api/groups/${gid}/players/${steamId}/fight?${query}`),
+  getPlayerWeapons: (gid: string, steamId: string, query: string) =>
+    request<PlayerWeapons>('GET', `/api/groups/${gid}/players/${steamId}/weapons?${query}`),
+  getPlayerUtility: (gid: string, steamId: string, query: string) =>
+    request<PlayerUtility>('GET', `/api/groups/${gid}/players/${steamId}/utility?${query}`),
   getMatchExt: (id: string | number) => request<MatchExt>('GET', `/api/matches/${id}/ext`),
   getSessionExt: (id: string | number) => request<SessionExt>('GET', `/api/sessions/${id}/ext`),
   // text — ввод поля как есть: ссылки через пробел или перевод строки

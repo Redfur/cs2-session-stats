@@ -145,11 +145,13 @@ interface FormDialogProps {
   submitLabel: string
   onSubmit: () => Promise<void>
   errorTitle?: string
+  // проверка полей перед отправкой; false — форма не отправляется, ошибку показывает само поле
+  validate?: () => boolean
   children: ReactNode
 }
 
 // FormDialog — тот же каркас с формой; Enter в поле отправляет форму.
-export function FormDialog({ open, onClose, title, submitLabel, onSubmit, errorTitle, children }: FormDialogProps) {
+export function FormDialog({ open, onClose, title, submitLabel, onSubmit, errorTitle, validate, children }: FormDialogProps) {
   const { busy, error, run } = useAsyncAction(open)
   return (
     <Shell
@@ -160,6 +162,7 @@ export function FormDialog({ open, onClose, title, submitLabel, onSubmit, errorT
       as="form"
       onSubmit={(e) => {
         e.preventDefault()
+        if (validate && !validate()) return
         run(onSubmit, onClose)
       }}
     >

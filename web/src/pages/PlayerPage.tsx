@@ -1,8 +1,9 @@
 import { ArrowRight, ExternalLink, Hourglass } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { useParams, useSearchParams } from 'react-router'
 import { api, sessionTitle, type PlayerProfile, type SessionSummary, type ProfileMap, type ProfileMatch, type ProfileSession } from '../api'
 import { RivalsCard } from '../components/Duels'
+import { MatchLink, SessionLink } from '../components/GroupLink'
 import { FightTab, UtilityTab, WeaponsTab } from '../components/PlayerExtTabs'
 import { PageError, PageLoading } from '../components/PageState'
 import { PeriodBar } from '../components/PeriodFilter'
@@ -19,6 +20,7 @@ import { Tabs } from '../components/ui/Tabs'
 import { rowLinkClass, StatTable, type Column } from '../components/ui/StatTable'
 import { StatTile } from '../components/ui/StatTile'
 import { formatDateLong, formatDateShort, plural } from '../format'
+import { paths, useGroupId } from '../groups'
 import { formatMetric, formatPct, scoreTierName } from '../metrics'
 import { usePeriod, useSessionList } from '../period'
 import { sortRows, useSort, type SortState } from '../sort'
@@ -44,9 +46,9 @@ const SESSION_COLUMNS: Column<ProfileSession>[] = [
     label: 'Сессия',
     value: (s) => sessionTitle(s.session),
     render: (s) => (
-      <Link to={`/sessions/${s.session.id}`} className={rowLinkClass}>
+      <SessionLink id={s.session.id} className={rowLinkClass}>
         {sessionTitle(s.session)}
-      </Link>
+      </SessionLink>
     ),
   },
   { key: 'date', label: 'Дата', numeric: true, secondary: true, width: 96, value: (s) => s.session.date, render: (s) => formatDateShort(s.session.date) },
@@ -94,9 +96,9 @@ const MATCH_COLUMNS: Column<ProfileMatch>[] = [
     label: 'Сессия',
     value: (m) => m.sessionTitle || formatDateLong(m.sessionDate),
     render: (m) => (
-      <Link to={`/sessions/${m.sessionId}`} className={rowLinkClass}>
+      <SessionLink id={m.sessionId} className={rowLinkClass}>
         {m.sessionTitle || formatDateLong(m.sessionDate)}
-      </Link>
+      </SessionLink>
     ),
   },
   {
@@ -108,9 +110,9 @@ const MATCH_COLUMNS: Column<ProfileMatch>[] = [
     width: 44,
     value: (m) => `${m.sessionDate}|${String(m.sessionId).padStart(10, '0')}|${String(m.ordinal).padStart(4, '0')}`,
     render: (m) => (
-      <Link to={`/matches/${m.matchId}`} className="focus-ring font-bold">
+      <MatchLink id={m.matchId} className="focus-ring font-bold">
         {m.ordinal}
-      </Link>
+      </MatchLink>
     ),
   },
   {
@@ -119,9 +121,9 @@ const MATCH_COLUMNS: Column<ProfileMatch>[] = [
     width: 130,
     value: (m) => m.map,
     render: (m) => (
-      <Link to={`/matches/${m.matchId}`} className={rowLinkClass}>
+      <MatchLink id={m.matchId} className={rowLinkClass}>
         {m.map || '—'}
-      </Link>
+      </MatchLink>
     ),
   },
   {
@@ -171,10 +173,11 @@ const MATCHES_DEFAULT: SortState = { key: 'n', dir: 'desc' }
 
 export function PlayerPage() {
   const { steamId = '', tab } = useParams()
+  const gid = useGroupId()
   const [params, setParams] = useSearchParams()
   const [data, setData] = useState<PlayerProfile | null>(null)
   const [error, setError] = useState('')
-  const sessions = useSessionList()
+  const sessions = useSessionList(gid)
   const period = usePeriod(params, setParams)
   const ss = useSort('ss', SESSION_COLUMNS, SESSIONS_DEFAULT)
   const sm = useSort('sm', MAP_COLUMNS, RATING_DESC)
@@ -189,7 +192,7 @@ export function PlayerPage() {
 
   const load = useCallback(() => {
     let stale = false
-    api.getPlayer(steamId, query).then(
+    api.getPlayer(gid, steamId, query).then(
       (d) => {
         if (stale) return
         setData(d)
@@ -200,13 +203,13 @@ export function PlayerPage() {
     return () => {
       stale = true
     }
-  }, [steamId, query])
+  }, [gid, steamId, query])
 
   useEffect(load, [load])
 
   if (!TABS.some((t) => t.tab === tab)) return <NotFoundPage />
   if (error && !data)
-    return <PageError title="Не удалось открыть профиль игрока" error={error} onRetry={load} back={{ to: '/players', label: 'Все игроки' }} />
+    return <PageError title="Не удалось открыть профиль игрока" error={error} onRetry={load} back={{ to: paths.players(gid), label: 'Все игроки' }} />
   if (!data) return <PageLoading />
 
   const t = data.totals
@@ -216,7 +219,7 @@ export function PlayerPage() {
   return (
     <Page>
       <PageHeader
-        back={{ to: '/players', label: 'Все игроки' }}
+        back={{ to: paths.players(gid), label: 'Все игроки' }}
         title={data.name}
         meta={
           <>
@@ -266,7 +269,7 @@ export function PlayerPage() {
       <Tabs
         label="Разделы профиля"
         items={TABS.map((t) => ({
-          to: `/players/${steamId}${t.path}${query ? `?${query}` : ''}`,
+          to: paths.player(gid, steamId, t.tab) + (query ? `?${query}` : ''),
           label: t.label,
           end: t.tab === undefined,
         }))}
@@ -320,9 +323,9 @@ function RatingTiles({ data, sessions }: { data: PlayerProfile; sessions: Sessio
         sub={
           lastSess && (
             <>
-              <Link to={`/sessions/${lastSess.id}`} className="focus-ring">
+              <SessionLink id={lastSess.id} className="focus-ring">
                 {sessionTitle(lastSess)}
-              </Link>
+              </SessionLink>
               {lastSess.title && ` · ${formatDateLong(lastSess.date)}`}
             </>
           )

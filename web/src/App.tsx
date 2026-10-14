@@ -1,5 +1,7 @@
 import { Route, Routes } from 'react-router'
-import { Layout } from './components/ui/Layout'
+import { AppShell } from './components/AppShell'
+import { GroupPage } from './pages/GroupPage'
+import { GroupRedirectPage } from './pages/GroupRedirectPage'
 import { MatchPage } from './pages/MatchPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { PlayerPage } from './pages/PlayerPage'
@@ -9,16 +11,22 @@ import { SessionsPage } from './pages/SessionsPage'
 
 export default function App() {
   return (
-    <Layout>
+    <AppShell>
       <Routes>
-        <Route path="/" element={<SessionsPage />} />
+        <Route path="/g/:gid" element={<SessionsPage />} />
+        <Route path="/g/:gid/sessions/:id" element={<SessionPage />} />
+        <Route path="/g/:gid/matches/:id" element={<MatchPage />} />
+        <Route path="/g/:gid/players" element={<PlayersPage />} />
+        <Route path="/g/:gid/players/:steamId" element={<PlayerPage />} />
+        <Route path="/g/:gid/players/:steamId/:tab" element={<PlayerPage />} />
+        <Route path="/g/:gid/group" element={<GroupPage />} />
+        {/* адреса без группы: сессия и матч сами переходят в группу своей сессии */}
+        <Route path="/" element={<GroupRedirectPage />} />
+        <Route path="/players/*" element={<GroupRedirectPage players />} />
         <Route path="/sessions/:id" element={<SessionPage />} />
         <Route path="/matches/:id" element={<MatchPage />} />
-        <Route path="/players" element={<PlayersPage />} />
-        <Route path="/players/:steamId" element={<PlayerPage />} />
-        <Route path="/players/:steamId/:tab" element={<PlayerPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
-    </Layout>
+    </AppShell>
   )
 }

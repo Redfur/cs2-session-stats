@@ -2,6 +2,7 @@ import { Info, Swords } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { ExtHeader, ExtMetric } from '../api'
 import { byMaps, missingTip, notComputedReason } from '../ext'
+import { paths, useGroupId } from '../groups'
 import { Alert } from './ui/Alert'
 import { Badge } from './ui/Badge'
 import { Button, ButtonLink } from './ui/Button'
@@ -92,6 +93,7 @@ export function ExtError({ title, text, onRetry }: { title: string; text: string
 }
 
 export function ExtNotComputed({ text, session }: { text: ReactNode; session?: { id: number; title: string } }) {
+  const gid = useGroupId()
   return (
     <Card as="div">
       <EmptyState
@@ -101,7 +103,7 @@ export function ExtNotComputed({ text, session }: { text: ReactNode; session?: {
         text={text}
         actions={
           session && (
-            <ButtonLink to={`/sessions/${session.id}`} variant="secondary">
+            <ButtonLink to={paths.session(gid, session.id)} variant="secondary">
               К сессии {session.title}
             </ButtonLink>
           )

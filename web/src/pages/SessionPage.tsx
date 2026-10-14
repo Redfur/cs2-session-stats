@@ -1,6 +1,6 @@
 import { Calendar, Info, Pencil, RefreshCw, Trash } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router'
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { api, isImportActive, isProcessing, sessionTitle, type Match, type PlayerRow, type SessionDetails, type SessionExt } from '../api'
 import { detailColumns, joinDetails } from '../components/detailColumns'
 import { useExtLoad } from '../ext'
@@ -24,6 +24,7 @@ import { Segment } from '../components/ui/Segment'
 import { SortHint, StatTable } from '../components/ui/StatTable'
 import { UploadList } from '../components/ui/UploadList'
 import { formatDateLong, plural } from '../format'
+import { paths, useGroupId } from '../groups'
 import { useNarrow } from '../media'
 import { sortRows, useSort, type SortState } from '../sort'
 import { useUploadQueue } from '../upload'
@@ -58,6 +59,8 @@ type Confirm = { kind: 'session' } | { kind: 'reparse' } | { kind: 'match'; matc
 
 export function SessionPage() {
   const { id = '' } = useParams()
+  const gid = useGroupId()
+  const { search } = useLocation()
   const navigate = useNavigate()
   const [data, setData] = useState<SessionDetails | null>(null)
   const [error, setError] = useState('')
@@ -120,8 +123,12 @@ export function SessionPage() {
   const ext = useExtLoad<SessionExt>(() => api.getSessionExt(id), `${id}|${extVersion}`)
 
   if (error && !data)
-    return <PageError title="Не удалось открыть сессию" error={error} onRetry={load} back={{ to: '/', label: 'К списку сессий' }} />
+    return (
+      <PageError title="Не удалось открыть сессию" error={error} onRetry={load} back={{ to: gid ? paths.sessions(gid) : '/', label: 'К списку сессий' }} />
+    )
   if (!data) return <PageLoading />
+  // адрес без группы или с чужой группой — переход на адрес группы сессии
+  if (String(data.session.groupId) !== gid) return <Navigate replace to={{ pathname: paths.session(data.session.groupId, id), search }} />
 
   const { session, matches, players, imports } = data
   const title = sessionTitle(session)
@@ -199,6 +206,7 @@ export function SessionPage() {
       nextNumber={nextNumber}
       sessionId={session.id}
       ordinalOf={ordinalOf}
+      matchHref={(matchId, sessionId) => (sessionId === session.id ? paths.match(gid, matchId) : paths.anyMatch(matchId))}
       onCancel={uploads.cancel}
       onCancelAll={uploads.cancelAll}
       onClear={uploads.clear}
@@ -212,7 +220,7 @@ export function SessionPage() {
   return (
     <Page>
       <PageHeader
-        back={{ to: '/', label: 'Все сессии' }}
+        back={{ to: paths.sessions(gid), label: 'Все сессии' }}
         titleSlot={
           editing === 'title' ? (
             <InlineEdit
@@ -478,7 +486,7 @@ export function SessionPage() {
         errorTitle="Не удалось удалить сессию."
         onConfirm={async () => {
           await api.deleteSession(id)
-          navigate('/')
+          navigate(paths.sessions(gid))
         }}
       />
       <ConfirmDialog

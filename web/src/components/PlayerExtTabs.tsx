@@ -14,6 +14,7 @@ import {
   type SurvivalRow,
 } from '../api'
 import { plural } from '../format'
+import { paths, useGroupId } from '../groups'
 import { sortRows, useSort, type SortState } from '../sort'
 import { coverageNote, fmt1, fmtInt, fmtPct, fmtSigned, missingTip, sharePct, useExtLoad, type Load } from '../ext'
 import { CoverageBadge, ExtAlerts, ExtError, ExtLoading, ExtNotComputed, MetricNum } from './ExtStats'
@@ -46,6 +47,7 @@ function ExtTab<T extends ExtHeader>({
   children: (data: T) => ReactNode
 }) {
   const { data, error, reload } = load
+  const gid = useGroupId()
   const session = (id: number) => {
     const s = sessions.find((x) => x.id === id)
     return s ? { id, title: sessionTitle(s) } : undefined
@@ -63,7 +65,7 @@ function ExtTab<T extends ExtHeader>({
     <ExtAlerts
       header={data}
       sessionLink={(id) => (
-        <ButtonLink to={`/sessions/${id}`} size="sm" variant="secondary">
+        <ButtonLink to={paths.session(gid, id)} size="sm" variant="secondary">
           К сессии
         </ButtonLink>
       )}
@@ -194,7 +196,8 @@ const SURVIVAL_COLUMNS: Column<SurvivalRow>[] = [
 ]
 
 export function FightTab({ steamId, query, sessions }: TabProps) {
-  const load = useExtLoad<PlayerFight>(() => api.getPlayerFight(steamId, query), `${steamId}|${query}`)
+  const gid = useGroupId()
+  const load = useExtLoad<PlayerFight>(() => api.getPlayerFight(gid, steamId, query), `${gid}|${steamId}|${query}`)
   return (
     <ExtTab load={load} sessions={sessions}>
       {(d: PlayerFight) => {
@@ -303,7 +306,8 @@ const WEAPON_COLUMNS_FULL = weaponColumns(true)
 const WEAPON_COLUMNS_NO_DAMAGE = weaponColumns(false)
 
 export function WeaponsTab({ steamId, query, sessions }: TabProps) {
-  const load = useExtLoad<PlayerWeapons>(() => api.getPlayerWeapons(steamId, query), `${steamId}|${query}`)
+  const gid = useGroupId()
+  const load = useExtLoad<PlayerWeapons>(() => api.getPlayerWeapons(gid, steamId, query), `${gid}|${steamId}|${query}`)
   const columns = load.data && load.data.weapons.damage.covered === 0 ? WEAPON_COLUMNS_NO_DAMAGE : WEAPON_COLUMNS_FULL
   const sw = useSort('sw', columns, WEAPONS_DEFAULT)
   return (
@@ -416,7 +420,8 @@ const GRENADE_MAP_COLUMNS: Column<GrenadeMap>[] = [
 ]
 
 export function UtilityTab({ steamId, query, sessions }: TabProps) {
-  const load = useExtLoad<PlayerUtility>(() => api.getPlayerUtility(steamId, query), `${steamId}|${query}`)
+  const gid = useGroupId()
+  const load = useExtLoad<PlayerUtility>(() => api.getPlayerUtility(gid, steamId, query), `${gid}|${steamId}|${query}`)
   return (
     <ExtTab load={load} sessions={sessions}>
       {(d: PlayerUtility) => {

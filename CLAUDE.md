@@ -57,7 +57,11 @@ internal/store     SQLite: groups, sessions, matches, match_players, imports; м
 internal/api       JSON API на net/http ServeMux; PlayerView для вывода. Группы и всё «по группе» — /api/groups/{gid}/sessions|players…;
                    сессии, матчи и загрузки — по своему id (/api/sessions/{id}, /api/matches/{id}, /api/imports/{id})
 internal/webui     раздача SPA: embed при -tags embedweb, иначе с диска (STATIC_DIR)
-web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI + lucide-react; страницы /, /sessions/:id, /matches/:id, /players, /players/:id[/fight|weapons|utility]
+web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI + lucide-react; страницы группы /g/:gid (сессии),
+                   /g/:gid/sessions/:id, /g/:gid/matches/:id, /g/:gid/players, /g/:gid/players/:id[/fight|weapons|utility], /g/:gid/group;
+                   /, /players… — в последнюю группу, /sessions/:id и /matches/:id — в группу сессии
+  src/groups.ts      адреса страниц группы (paths), useGroupId, список групп (GroupsContext), последняя группа в localStorage;
+                     src/components/AppShell.tsx — шапка с ui/GroupSwitcher, src/components/GroupLink.tsx — ссылки для рендеров колонок
   src/index.css      токены дизайна (@theme), шрифты Manrope и JetBrains Mono самохостом (@fontsource-variable)
   src/components/ui  компоненты дизайн-системы: каркас, кнопки, поля, бейджи, StatTable, диалоги, загрузка
   src/metrics.ts     шкала «плохо / средне / хорошо» для rating, K/D, ADR, KAST; ступени оценки 0–100
@@ -83,6 +87,7 @@ web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI 
 - **Очередь** — таблица `matches`. `ClaimNextPending` идёт в порядке `has_result, id`, так что новые загрузки обрабатываются раньше пересчётов. При остановке сервиса матч остаётся `parsing`, при старте `ResetParsing` возвращает его в очередь, а не помечает `failed`.
 - **Команды A/B:** A — команда, начавшая матч за CT. После смены сторон её сторона определяется по большинству её игроков. Счёт считается по победителям раундов. На `TeamState` не опираемся.
 - **SteamID64 в JSON — строка**: в JavaScript number он теряет точность.
+- **Ссылки фронта — только через `paths` из `src/groups.ts`**, чтобы не выпасть из группы. Компоненты `ui/` адрес не собирают, а получают пропсом (`playerHref`, `matchHref`). Ссылка на дубликат из загрузки ведёт на `/matches/:id` без группы (`paths.anyMatch`): матч может быть в другой группе, страница сама перейдёт на адрес своей группы.
 - **Фильтры и сортировка — в адресе страницы.** Сортировка: `sort` для главной таблицы, `ss`/`sm`/`sx` для разбивок профиля; значение по умолчанию в адрес не пишется. Шкала метрик сравнивает округлённое отображаемое значение.
 - **Демки загружаются по одной** (`api.uploadDemo` с `AbortSignal`), очередь на клиенте строго последовательна — так порядок матчей совпадает с порядком файлов.
 - **Импорт по ссылке.** Матч появляется только после скачивания и приёма демки: статусы `matches` не меняются, загрузки живут в `imports` (`queued`/`downloading`/`done`/`failed`) и показываются отдельным списком (решение пользователя, макет показывает их строками таблицы матчей). Скачивания — по одному, отдельной горутиной от воркера разбора; при старте `downloading` возвращается в очередь.

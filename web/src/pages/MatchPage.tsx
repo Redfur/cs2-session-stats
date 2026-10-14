@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, LoaderCircle, RefreshCw, Trash } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { Swords } from 'lucide-react'
-import { useNavigate, useParams, useSearchParams } from 'react-router'
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { api, isProcessing, sessionTitle, type MatchDetails, type MatchExt, type PlayerRow, type SessionDetails, type Side } from '../api'
 import { detailColumns, joinDetails, type DetailPlayer } from '../components/detailColumns'
 import { MatchDuelsCard } from '../components/Duels'
@@ -25,6 +25,7 @@ import { TeamOvr } from '../components/ui/Rating'
 import { Segment } from '../components/ui/Segment'
 import { StatTable, type Column } from '../components/ui/StatTable'
 import { plural } from '../format'
+import { paths, useGroupId } from '../groups'
 import { sortRows, useSort, type SortState } from '../sort'
 
 const POLL_MS = 3000
@@ -44,6 +45,8 @@ type View = 'basic' | 'detail'
 
 export function MatchPage() {
   const { id = '' } = useParams()
+  const gid = useGroupId()
+  const { search } = useLocation()
   const [data, setData] = useState<MatchDetails | null>(null)
   // сессия матча: название и соседние матчи
   const [session, setSession] = useState<SessionDetails | null>(null)
@@ -99,8 +102,12 @@ export function MatchPage() {
   const ext = extLoad.data?.status === 'complete' ? extLoad.data : null
 
   if (error && !data)
-    return <PageError title="Не удалось открыть матч" error={error} onRetry={load} back={{ to: '/', label: 'К списку сессий' }} />
+    return (
+      <PageError title="Не удалось открыть матч" error={error} onRetry={load} back={{ to: gid ? paths.sessions(gid) : '/', label: 'К списку сессий' }} />
+    )
   if (!data) return <PageLoading />
+  // адрес без группы или с чужой группой — переход на адрес группы сессии матча
+  if (String(data.groupId) !== gid) return <Navigate replace to={{ pathname: paths.match(data.groupId, id), search }} />
 
   const { match, players } = data
   const siblings = session && session.session.id === match.sessionId ? session.matches : null
@@ -111,7 +118,7 @@ export function MatchPage() {
   const nav = siblings && index >= 0 && (
     <div className="mr-2 flex items-center gap-1">
       {prev ? (
-        <ButtonLink to={`/matches/${prev.id}`} icon aria-label={`Предыдущий матч #${index}`}>
+        <ButtonLink to={paths.match(gid, prev.id)} icon aria-label={`Предыдущий матч #${index}`}>
           <ChevronLeft aria-hidden />
         </ButtonLink>
       ) : (
@@ -123,7 +130,7 @@ export function MatchPage() {
         {index + 1} из {siblings.length}
       </span>
       {next ? (
-        <ButtonLink to={`/matches/${next.id}`} icon aria-label={`Следующий матч #${index + 2}`}>
+        <ButtonLink to={paths.match(gid, next.id)} icon aria-label={`Следующий матч #${index + 2}`}>
           <ChevronRight aria-hidden />
         </ButtonLink>
       ) : (
@@ -137,7 +144,7 @@ export function MatchPage() {
   return (
     <Page>
       <PageHeader
-        back={{ to: `/sessions/${match.sessionId}`, label: session ? `к сессии ${sessionTitle(session.session)}` : 'к сессии' }}
+        back={{ to: paths.session(gid, match.sessionId), label: session ? `к сессии ${sessionTitle(session.session)}` : 'к сессии' }}
         title={
           <>
             Матч #{match.ordinal}
@@ -314,7 +321,7 @@ export function MatchPage() {
         errorTitle="Не удалось удалить матч."
         onConfirm={async () => {
           await api.deleteMatch(match.id)
-          navigate(`/sessions/${match.sessionId}`)
+          navigate(paths.session(gid, match.sessionId))
         }}
       />
     </Page>
