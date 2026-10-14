@@ -95,7 +95,16 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, playersResponse{Players: totalsView(list)})
+	book, err := s.ratingBook(r.Context())
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	players := totalsView(list)
+	for i := range players {
+		players[i].OVR = playerOVR(book, steamIDOf(players[i]))
+	}
+	writeJSON(w, http.StatusOK, playersResponse{Players: players})
 }
 
 type profileSession struct {
@@ -121,12 +130,16 @@ type profileMatch struct {
 }
 
 type profileResponse struct {
-	SteamID  string           `json:"steamId"`
-	Name     string           `json:"name"`
-	Totals   PlayerView       `json:"totals"`
-	Sessions []profileSession `json:"sessions"`
-	Maps     []profileMap     `json:"maps"`
-	Matches  []profileMatch   `json:"matches"`
+	SteamID string     `json:"steamId"`
+	Name    string     `json:"name"`
+	Totals  PlayerView `json:"totals"`
+	// OVR, «Среднее за 20» и последняя сессия не зависят от периода.
+	OVR         *OVRView           `json:"ovr,omitempty"`
+	Last20      *int               `json:"last20,omitempty"`
+	LastSession *SessionChangeView `json:"lastSession,omitempty"`
+	Sessions    []profileSession   `json:"sessions"`
+	Maps        []profileMap       `json:"maps"`
+	Matches     []profileMatch     `json:"matches"`
 }
 
 func (s *Server) getPlayer(w http.ResponseWriter, r *http.Request) {
@@ -179,6 +192,12 @@ func (s *Server) getPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	book, err := s.ratingBook(ctx)
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+
 	resp := profileResponse{
 		SteamID:  strconv.FormatUint(steamID, 10),
 		Name:     name,
@@ -186,15 +205,30 @@ func (s *Server) getPlayer(w http.ResponseWriter, r *http.Request) {
 		Sessions: make([]profileSession, 0, len(sessions)),
 		Maps:     make([]profileMap, 0, len(maps)),
 		Matches:  make([]profileMatch, 0, len(matches)),
+		OVR:      playerOVR(book, steamID),
+	}
+	if c, ok := book.Last(steamID, last20Matches); ok && c.Rounds > 0 {
+		v := stats.ScorePoints(c.Rating())
+		resp.Last20 = &v
+	}
+	if ch, ok := book.LastSession(steamID); ok {
+		resp.LastSession = sessionChangeView(book, ch)
 	}
 	for _, p := range sessions {
-		resp.Sessions = append(resp.Sessions, profileSession{Session: p.Session, PlayerView: aggregateView(steamID, name, p.Aggregate)})
+		v := aggregateView(steamID, name, p.Aggregate)
+		if ch, ok := book.Session(steamID, p.Session.ID); ok {
+			v.Change = sessionChangeView(book, ch)
+		}
+		resp.Sessions = append(resp.Sessions, profileSession{Session: p.Session, PlayerView: v})
 	}
 	for _, p := range maps {
 		resp.Maps = append(resp.Maps, profileMap{Map: p.Map, PlayerView: aggregateView(steamID, name, p.Aggregate)})
 	}
 	for _, p := range matches {
 		v := MatchPlayerView(stats.PlayerStats{SteamID: steamID, Name: name, Team: p.Team, Result: p.Result, Counters: p.Counters})
+		if st, ok := book.Before(steamID, p.MatchID); ok {
+			setBefore(&v, st)
+		}
 		resp.Matches = append(resp.Matches, profileMatch{
 			MatchID: p.MatchID, SessionID: p.SessionID, SessionDate: p.SessionDate, SessionTitle: p.SessionTitle,
 			Ordinal: p.Ordinal, Map: p.Map, ScoreA: p.ScoreA, ScoreB: p.ScoreB, PlayerView: v,

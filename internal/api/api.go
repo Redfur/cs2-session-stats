@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"cs2stats/internal/ingest"
+	"cs2stats/internal/rating"
 	"cs2stats/internal/stats"
 	"cs2stats/internal/store"
 )
@@ -29,6 +30,8 @@ type Server struct {
 	Imports Imports
 	Log     *slog.Logger
 	Now     func() time.Time
+	// Rating — параметры OVR; нулевые значения заменяются значениями по умолчанию.
+	Rating rating.Params
 }
 
 // Handler возвращает маршруты API; остальные пути обслуживает static (фронтенд).
@@ -279,7 +282,18 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, sessionResponse{Session: sess, Matches: matches, Players: totalsView(agg), Imports: imports})
+	book, err := s.ratingBook(r.Context())
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	players := totalsView(agg)
+	for i := range players {
+		if ch, ok := book.Session(steamIDOf(players[i]), id); ok {
+			players[i].Change = sessionChangeView(book, ch)
+		}
+	}
+	writeJSON(w, http.StatusOK, sessionResponse{Session: sess, Matches: matches, Players: players, Imports: imports})
 }
 
 func (s *Server) uploadDemos(w http.ResponseWriter, r *http.Request) {
@@ -331,6 +345,7 @@ func (s *Server) uploadDemos(w http.ResponseWriter, r *http.Request) {
 type matchResponse struct {
 	Match   store.Match  `json:"match"`
 	Players []PlayerView `json:"players"`
+	Teams   teamsOVRView `json:"teams"` // средний OVR команд перед матчем
 }
 
 func (s *Server) getMatch(w http.ResponseWriter, r *http.Request) {
@@ -348,7 +363,18 @@ func (s *Server) getMatch(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, matchResponse{Match: m, Players: sortScoreboard(ps)})
+	book, err := s.ratingBook(r.Context())
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
+	players := sortScoreboard(ps)
+	ids := make([]uint64, len(players))
+	for i, p := range players {
+		ids[i] = steamIDOf(p)
+	}
+	teams := withMatchRating(book, id, players, ids)
+	writeJSON(w, http.StatusOK, matchResponse{Match: m, Players: players, Teams: teams})
 }
 
 // sortScoreboard — игроки матча в порядке scoreboard: команда A, затем B, внутри — по rating.

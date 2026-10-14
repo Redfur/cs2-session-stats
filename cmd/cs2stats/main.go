@@ -20,6 +20,7 @@ import (
 	"cs2stats/internal/importer"
 	"cs2stats/internal/ingest"
 	"cs2stats/internal/parser"
+	"cs2stats/internal/rating"
 	"cs2stats/internal/stats"
 	"cs2stats/internal/store"
 	"cs2stats/internal/webui"
@@ -103,6 +104,7 @@ func serve() error {
 			Wake:    w.Wake,
 			Imports: imp,
 			Log:     logger,
+			Rating:  rating.Params{Alpha: rating.DefaultAlpha, Calibration: cfg.RatingCalibration},
 		}).Handler(webui.Default()),
 		// без ReadTimeout: загрузка демок по медленному каналу может идти долго
 		ReadHeaderTimeout: 10 * time.Second,

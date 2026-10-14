@@ -91,17 +91,18 @@ R̄ ← R̄ + w·(r_m − R̄)       (первый матч: R̄ = r_m)
 
 ### 5. API
 
-Расчёт — `s.ratingBook(ctx)`: `RatingRows` + `rating.Build` на каждый запрос, где нужен рейтинг. Для сотен матчей это миллисекунды, кэш не нужен (пересчёт и перестановка сразу видны).
+Расчёт — `s.ratingBook(ctx)` (`internal/api/rating.go`): `RatingRows` + `rating.Build` на каждый запрос, где нужен рейтинг. Для сотен матчей это миллисекунды, кэш не нужен (пересчёт и перестановка сразу видны).
 
 Новые поля (баллы — целые, `null`/отсутствие — «нет данных»):
 
 ```ts
 type OVR = { score: number; rating: number; matches: number; calibrating: boolean }
 
-PlayerView                 + score: number            // оценка за матч / сессию / период
+PlayerView                 + score?: number           // оценка за матч / сессию / период; нет без раундов
 GET /api/players           players[].ovr?: OVR
-GET /api/players/{id}      ovr?: OVR; last20?: number;
-                           lastSession?: SessionChange
+GET /api/players/{id}      ovr?: OVR; last20?: number; lastSession?: SessionChange
+                           sessions[].change: SessionChange       // «к обычному» в разбивке
+                           matches[].before?, matches[].vsUsual?  // как в scoreboard
 GET /api/sessions/{id}     players[].change: SessionChange
 GET /api/matches/{id}      players[].before?: number   // OVR перед матчем; нет — первый матч
                            players[].vsUsual?: number  // оценка матча − before
@@ -111,10 +112,12 @@ type TeamOVR = { score: number; rated: number; total: number }  // «по rated 
 
 type SessionChange = {
   sessionId: number
+  score: number            // оценка за сессию (для подсказки в профиле)
   before?: number          // OVR перед первым матчем игрока в сессии; нет — первая сессия
   after: number            // OVR после последнего матча в сессии
   delta?: number           // after − before по округлённым значениям
-  vsUsual?: number         // оценка за сессию − before
+  vsUsual?: number         // score − before
+  matches: number          // матчей игрока после сессии (счётчик «8/10» в калибровке)
   calibrating: boolean     // OVR после сессии ещё в калибровке
 }
 ```

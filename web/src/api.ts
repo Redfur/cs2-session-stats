@@ -66,6 +66,47 @@ export interface PlayerRow {
   hsPct: number
   kastPct: number
   rating: number
+  // оценка 0–100 по rating; нет, если раундов нет
+  score?: number
+  // таблица игроков: текущий OVR, от периода не зависит
+  ovr?: OVR
+  // итоги сессии и разбивка профиля по сессиям: OVR до и после сессии
+  change?: SessionChange
+  // scoreboard и список матчей профиля: OVR перед матчем; нет — первый матч игрока
+  before?: number
+  // оценка за матч минус before
+  vsUsual?: number
+}
+
+// OVR — общий уровень игрока по всем его матчам.
+export interface OVR {
+  score: number
+  // R̄ до шкалы
+  rating: number
+  matches: number
+  calibrating: boolean
+}
+
+// SessionChange — OVR до и после сессии; разницы посчитаны по округлённым баллам.
+export interface SessionChange {
+  sessionId: number
+  // оценка за сессию
+  score: number
+  // нет — сессия у игрока первая
+  before?: number
+  after: number
+  delta?: number
+  vsUsual?: number
+  // матчей игрока после сессии
+  matches: number
+  calibrating: boolean
+}
+
+// TeamOVR — средний OVR команды перед матчем «по rated из total» игроков.
+export interface TeamOVR {
+  score: number
+  rated: number
+  total: number
 }
 
 export interface SessionDetails {
@@ -113,6 +154,7 @@ export interface ImportAddResult {
 export interface MatchDetails {
   match: Match
   players: PlayerRow[]
+  teams: { A?: TeamOVR; B?: TeamOVR }
 }
 
 export interface PlayersResponse {
@@ -142,6 +184,10 @@ export interface PlayerProfile {
   steamId: string
   name: string
   totals: PlayerRow
+  // OVR, «Среднее за 20» и последняя сессия не зависят от периода
+  ovr?: OVR
+  last20?: number
+  lastSession?: SessionChange
   sessions: ProfileSession[]
   maps: ProfileMap[]
   matches: ProfileMatch[]
