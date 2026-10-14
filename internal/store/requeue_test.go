@@ -42,7 +42,7 @@ func statusOf(t *testing.T, s *Store, id int64) MatchStatus {
 func TestRequeueOutdated(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	ids := setupStatuses(t, s, sess.ID)
 
 	// версия не менялась: ничего не ставится, включая упавшие
@@ -68,8 +68,8 @@ func TestRequeueOutdated(t *testing.T) {
 func TestRequeueManual(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
-	other, _ := s.CreateSession(ctx, "2026-10-09", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	other, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
 	ids := setupStatuses(t, s, sess.ID)
 	foreign, _ := s.AddMatch(ctx, other.ID, "foreign", "f.dem")
 	s.db.Exec("UPDATE matches SET status='done', has_result=1, processed_version=1 WHERE id=?", foreign.ID)

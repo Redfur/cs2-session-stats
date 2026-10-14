@@ -68,8 +68,8 @@ func saveParsed(t *testing.T, e *testEnv, sess store.Session, sha string, m pars
 func TestPlayerExtTabs(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
-	s1, _ := e.store.CreateSession(ctx, "2026-10-01", "")
-	s2, _ := e.store.CreateSession(ctx, "2026-10-08", "")
+	s1, _ := e.store.CreateSession(ctx, 1, "2026-10-01", "")
+	s2, _ := e.store.CreateSession(ctx, 1, "2026-10-08", "")
 	saveParsed(t, e, s1, "new", extMatch(), store.ExtendedSinceVersion)
 	old := saveParsed(t, e, s2, "old", extMatch(), store.ExtendedSinceVersion-1)
 	a1 := fmt.Sprint(extA1)
@@ -78,7 +78,7 @@ func TestPlayerExtTabs(t *testing.T) {
 	}
 
 	var f fightResponse
-	if code := e.do(t, "GET", "/api/players/"+a1+"/fight", "", nil, &f); code != 200 {
+	if code := e.do(t, "GET", "/api/groups/1/players/"+a1+"/fight", "", nil, &f); code != 200 {
 		t.Fatalf("бой: %d", code)
 	}
 	if f.Status != "partial" || f.EligibleMatches != 2 || f.CoveredMatches != 1 ||
@@ -110,13 +110,13 @@ func TestPlayerExtTabs(t *testing.T) {
 
 	// клатч a2 1v1 — победа
 	var f2 fightResponse
-	e.do(t, "GET", fmt.Sprintf("/api/players/%d/fight", extA2), "", nil, &f2)
+	e.do(t, "GET", fmt.Sprintf("/api/groups/1/players/%d/fight", extA2), "", nil, &f2)
 	if r := f2.Clutches.Rows[0]; r.Vs != 1 || r.Attempts != 1 || r.Wins != 1 || r.WinRate == nil || *r.WinRate != 1 {
 		t.Errorf("клатч a2: %+v", r)
 	}
 
 	var wr weaponsResponse
-	e.do(t, "GET", "/api/players/"+a1+"/weapons", "", nil, &wr)
+	e.do(t, "GET", "/api/groups/1/players/"+a1+"/weapons", "", nil, &wr)
 	if len(wr.Weapons.Rows) != 1 || wr.Weapons.Rows[0].Weapon != "ak47" || *wr.Weapons.Rows[0].HSKillsPct != 100 || wr.Weapons.Rows[0].HSHitsPct == nil {
 		t.Errorf("оружие: %+v", wr.Weapons.Rows)
 	}
@@ -125,7 +125,7 @@ func TestPlayerExtTabs(t *testing.T) {
 	}
 
 	var u utilityResponse
-	e.do(t, "GET", fmt.Sprintf("/api/players/%d/utility", extA2), "", nil, &u)
+	e.do(t, "GET", fmt.Sprintf("/api/groups/1/players/%d/utility", extA2), "", nil, &u)
 	if u.Grenades.HE.Value == nil || *u.Grenades.HE.Value != 40 || u.Grenades.HE.Covered != 1 || u.Grenades.HE.Total != 2 {
 		t.Errorf("урон HE: %+v", u.Grenades.HE)
 	}
@@ -137,17 +137,17 @@ func TestPlayerExtTabs(t *testing.T) {
 	}
 
 	// период только со старым матчем — расширенные данные недоступны
-	e.do(t, "GET", fmt.Sprintf("/api/players/%s/fight?session=%d", a1, s2.ID), "", nil, &f)
+	e.do(t, "GET", fmt.Sprintf("/api/groups/1/players/%s/fight?session=%d", a1, s2.ID), "", nil, &f)
 	if f.Status != "unavailable" || f.Damage.DealtPerRound != nil {
 		t.Errorf("только старый матч: %+v", f)
 	}
 	// пустой период
-	e.do(t, "GET", "/api/players/"+a1+"/fight?from=2030-01-01", "", nil, &f)
+	e.do(t, "GET", "/api/groups/1/players/"+a1+"/fight?from=2030-01-01", "", nil, &f)
 	if f.Status != "no_matches" {
 		t.Errorf("пустой период: %s", f.Status)
 	}
 	var errResp map[string]string
-	if code := e.do(t, "GET", "/api/players/76561198999999999/utility", "", nil, &errResp); code != 404 {
+	if code := e.do(t, "GET", "/api/groups/1/players/76561198999999999/utility", "", nil, &errResp); code != 404 {
 		t.Errorf("неизвестный игрок: %d", code)
 	}
 }
@@ -155,7 +155,7 @@ func TestPlayerExtTabs(t *testing.T) {
 func TestMatchAndSessionExt(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
-	sess, _ := e.store.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := e.store.CreateSession(ctx, 1, "2026-10-08", "")
 	id := saveParsed(t, e, sess, "new", extMatch(), store.ExtendedSinceVersion)
 	old := saveParsed(t, e, sess, "old", extMatch(), store.ExtendedSinceVersion-1)
 

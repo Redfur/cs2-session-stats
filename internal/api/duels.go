@@ -205,27 +205,11 @@ func byShare(list []opponentView, keep func(opponentView) bool, best bool) []opp
 }
 
 func (s *Server) getPlayerDuels(w http.ResponseWriter, r *http.Request) {
-	steamID, err := strconv.ParseUint(r.PathValue("steamId"), 10, 64)
-	if err != nil || steamID == 0 {
-		writeError(w, http.StatusBadRequest, "некорректный SteamID")
+	steamID, f, _, ok := s.playerRequest(w, r)
+	if !ok {
 		return
 	}
-	f, err := parsePeriod(r.URL.Query())
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	ctx := r.Context()
-	all, err := s.Store.PlayerTotals(ctx, store.MatchFilter{PlayerIDs: []uint64{steamID}}, 1)
-	if err != nil {
-		s.internalError(w, err)
-		return
-	}
-	if len(all) == 0 {
-		writeError(w, http.StatusNotFound, "игрок не найден")
-		return
-	}
-	d, err := s.Store.PlayerDuels(ctx, steamID, f)
+	d, err := s.Store.PlayerDuels(r.Context(), steamID, f)
 	if err != nil {
 		s.internalError(w, err)
 		return

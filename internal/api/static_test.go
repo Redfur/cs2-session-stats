@@ -39,7 +39,7 @@ func TestStaticAndAPIRouting(t *testing.T) {
 	if code, _, body := get("/assets/app-1.js"); code != 200 || body != "console.log(1)" {
 		t.Errorf("статический файл: %d %q", code, body)
 	}
-	if code, ct, body := get("/api/sessions"); code != 200 || !strings.HasPrefix(ct, "application/json") || strings.TrimSpace(body) != "[]" {
+	if code, ct, body := get("/api/groups/1/sessions"); code != 200 || !strings.HasPrefix(ct, "application/json") || strings.TrimSpace(body) != "[]" {
 		t.Errorf("API: %d %s %q", code, ct, body)
 	}
 }

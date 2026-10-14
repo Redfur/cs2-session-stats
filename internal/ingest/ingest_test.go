@@ -46,7 +46,7 @@ func newEnv(t *testing.T, maxSize int64) env {
 	demos, _ := NewLocalStorage(filepath.Join(dir, "demos"))
 	tmp := filepath.Join(dir, "tmp")
 	os.MkdirAll(tmp, 0o755)
-	sess, _ := st.CreateSession(context.Background(), "2026-10-08", "")
+	sess, _ := st.CreateSession(context.Background(), 1, "2026-10-08", "")
 	return env{svc: &Service{Store: st, Demos: demos, TmpDir: tmp, MaxSize: maxSize}, store: st, demos: demos, session: sess.ID}
 }
 
@@ -167,7 +167,7 @@ func TestDuplicate(t *testing.T) {
 	}
 
 	// та же демка в архиве и в другой сессии
-	other, _ := e.store.CreateSession(context.Background(), "2026-10-09", "")
+	other, _ := e.store.CreateSession(context.Background(), 1, "2026-10-09", "")
 	res := e.svc.Ingest(context.Background(), other.ID, "match.dem.gz", bytes.NewReader(gz(t, sampleDemo)))
 	if res.Status != Duplicate || res.MatchID != first.MatchID || res.SessionID != e.session {
 		t.Fatalf("ожидался duplicate со ссылкой на матч %d, получено %+v", first.MatchID, res)

@@ -20,8 +20,8 @@ const (
 func seedPlayers(t *testing.T, e *testEnv) (s1, s2 store.Session) {
 	t.Helper()
 	ctx := context.Background()
-	s1, _ = e.store.CreateSession(ctx, "2026-10-01", "")
-	s2, _ = e.store.CreateSession(ctx, "2026-10-08", "четверг")
+	s1, _ = e.store.CreateSession(ctx, 1, "2026-10-01", "")
+	s2, _ = e.store.CreateSession(ctx, 1, "2026-10-08", "четверг")
 	n := 0
 	add := func(sess store.Session, ids ...uint64) {
 		n++
@@ -55,7 +55,7 @@ func TestListPlayers(t *testing.T) {
 	get := func(query string) (int, playersResponse) {
 		t.Helper()
 		var resp playersResponse
-		code := e.do(t, "GET", "/api/players?"+query, "", nil, &resp)
+		code := e.do(t, "GET", "/api/groups/1/players?"+query, "", nil, &resp)
 		return code, resp
 	}
 
@@ -114,7 +114,7 @@ func TestListPlayersValidation(t *testing.T) {
 		"from=2026-10-01&session=1",
 	} {
 		var resp map[string]string
-		if code := e.do(t, "GET", "/api/players?"+q, "", nil, &resp); code != 400 || resp["error"] == "" {
+		if code := e.do(t, "GET", "/api/groups/1/players?"+q, "", nil, &resp); code != 400 || resp["error"] == "" {
 			t.Errorf("%s: %d %v", q, code, resp)
 		}
 	}
@@ -123,7 +123,7 @@ func TestListPlayersValidation(t *testing.T) {
 func TestGetPlayer(t *testing.T) {
 	e := newTestEnv(t)
 	s1, s2 := seedPlayers(t, e)
-	path := fmt.Sprintf("/api/players/%d", steamA)
+	path := fmt.Sprintf("/api/groups/1/players/%d", steamA)
 
 	var p profileResponse
 	if code := e.do(t, "GET", path, "", nil, &p); code != 200 {
@@ -146,7 +146,7 @@ func TestGetPlayer(t *testing.T) {
 	// итоги профиля совпадают со строкой общей таблицы за тот же период
 	period := url.Values{"session": {fmt.Sprint(s2.ID)}}.Encode()
 	var list playersResponse
-	e.do(t, "GET", "/api/players?"+period+fmt.Sprintf("&player=%d", steamA), "", nil, &list)
+	e.do(t, "GET", "/api/groups/1/players?"+period+fmt.Sprintf("&player=%d", steamA), "", nil, &list)
 	e.do(t, "GET", path+"?"+period, "", nil, &p)
 	if len(list.Players) != 1 || fmt.Sprint(list.Players[0].Counters) != fmt.Sprint(p.Totals.Counters) ||
 		list.Players[0].Rating != p.Totals.Rating || p.Totals.Matches != 2 {
@@ -169,10 +169,10 @@ func TestGetPlayer(t *testing.T) {
 	}
 
 	var errResp map[string]string
-	if code := e.do(t, "GET", "/api/players/76561198000000099", "", nil, &errResp); code != 404 {
+	if code := e.do(t, "GET", "/api/groups/1/players/76561198000000099", "", nil, &errResp); code != 404 {
 		t.Errorf("неизвестный игрок: %d", code)
 	}
-	if code := e.do(t, "GET", "/api/players/abc", "", nil, &errResp); code != 400 {
+	if code := e.do(t, "GET", "/api/groups/1/players/abc", "", nil, &errResp); code != 400 {
 		t.Errorf("нечисловой SteamID: %d", code)
 	}
 	if code := e.do(t, "GET", path+"?from=x", "", nil, &errResp); code != 400 {
@@ -183,11 +183,11 @@ func TestGetPlayer(t *testing.T) {
 func TestListSessionsSummary(t *testing.T) {
 	e := newTestEnv(t)
 	_, s2 := seedPlayers(t, e)
-	empty, _ := e.store.CreateSession(context.Background(), "2026-10-09", "")
+	empty, _ := e.store.CreateSession(context.Background(), 1, "2026-10-09", "")
 
 	// SteamID проверяется по сырому JSON: в number он потерял бы точность
 	var raw []map[string]any
-	if code := e.do(t, "GET", "/api/sessions", "", nil, &raw); code != 200 || len(raw) != 3 {
+	if code := e.do(t, "GET", "/api/groups/1/sessions", "", nil, &raw); code != 200 || len(raw) != 3 {
 		t.Fatalf("список: %d %v", code, raw)
 	}
 	if _, ok := raw[0]["best"]; ok || raw[0]["id"] != float64(empty.ID) {

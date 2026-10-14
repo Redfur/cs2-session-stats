@@ -53,9 +53,9 @@ const (
 func TestSessionAndPlayerDuels(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	s1, _ := s.CreateSession(ctx, "2026-10-01", "")
-	s2, _ := s.CreateSession(ctx, "2026-10-08", "")
-	s3, _ := s.CreateSession(ctx, "2026-10-09", "")
+	s1, _ := s.CreateSession(ctx, 1, "2026-10-01", "")
+	s2, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	s3, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
 	ids := addMatches(t, s, s1.ID, "m1", "m2", "m3", "m4", "old")
 	// A против B три раза: 3:1, 0:0, 2:4; в m4 A и B вместе против C
 	saveDuels(t, s, ids[0], []uint64{dA}, []uint64{dB}, map[[2]uint64]int{{dA, dB}: 3, {dB, dA}: 1}, DuelsSinceVersion)

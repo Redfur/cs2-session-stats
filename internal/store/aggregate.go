@@ -10,6 +10,7 @@ import (
 // MatchFilter — выборка матчей для агрегатов. В выборку всегда входят только матчи
 // с посчитанным результатом, включая пересчитываемые и матчи с неудачным пересчётом.
 type MatchFilter struct {
+	GroupID    int64    // только сессии этой группы; 0 — без ограничения (тесты и CLI)
 	From, To   string   // границы по дате сессии YYYY-MM-DD включительно; пустая строка — без границы
 	SessionIDs []int64  // только эти сессии; пусто — все
 	PlayerIDs  []uint64 // в PlayerTotals: только строки этих игроков
@@ -20,6 +21,10 @@ type MatchFilter struct {
 func (f MatchFilter) where(m, s string) (string, []any) {
 	conds := []string{m + ".has_result = 1"}
 	var args []any
+	if f.GroupID != 0 {
+		conds = append(conds, s+".group_id = ?")
+		args = append(args, f.GroupID)
+	}
 	if f.From != "" {
 		conds = append(conds, s+".date >= ?")
 		args = append(args, f.From)
@@ -41,6 +46,11 @@ func (f MatchFilter) where(m, s string) (string, []any) {
 		args = append(args, len(ids))
 	}
 	return strings.Join(conds, " AND "), args
+}
+
+// period — та же выборка без фильтров по игрокам: группа и период (даты или сессии).
+func (f MatchFilter) period() MatchFilter {
+	return MatchFilter{GroupID: f.GroupID, From: f.From, To: f.To, SessionIDs: f.SessionIDs}
 }
 
 func placeholders(n int) string {
@@ -160,7 +170,7 @@ type PlayerSession struct {
 func (s *Store) PlayerSessions(ctx context.Context, steamID uint64, f MatchFilter) ([]PlayerSession, error) {
 	where, args := f.where("m", "s")
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT s.id, s.date, s.title, s.created_at, `+sumColumns+`
+		SELECT `+sessionColumns+`, `+sumColumns+`
 		`+fromPlayerMatches+`
 		WHERE mp.steam_id = ? AND `+where+`
 		GROUP BY s.id
@@ -172,8 +182,7 @@ func (s *Store) PlayerSessions(ctx context.Context, steamID uint64, f MatchFilte
 	list := []PlayerSession{}
 	for rows.Next() {
 		var p PlayerSession
-		sess := &p.Session
-		dest := append([]any{&sess.ID, &sess.Date, &sess.Title, &sess.CreatedAt}, aggTargets(&p.Aggregate)...)
+		dest := append(sessionTargets(&p.Session), aggTargets(&p.Aggregate)...)
 		if err := rows.Scan(dest...); err != nil {
 			return nil, err
 		}

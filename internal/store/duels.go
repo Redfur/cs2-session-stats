@@ -104,7 +104,7 @@ func (s *Store) SessionDuels(ctx context.Context, sessionID int64) (SessionDuels
 // Opponent — личный счёт игрока с соперником за выборку.
 type Opponent struct {
 	SteamID uint64
-	Name    string // ник из последнего матча соперника без учёта выборки
+	Name    string // ник из последнего матча соперника в группе без учёта периода
 	Kills   int
 	Deaths  int
 	Maps    int
@@ -119,10 +119,10 @@ type PlayerDuels struct {
 }
 
 // PlayerDuels суммирует личный счёт игрока со всеми соперниками по матчам выборки f
-// с посчитанными дуэлями. Используются только период f (даты или сессии).
+// с посчитанными дуэлями. Используются только группа и период f (даты или сессии).
 func (s *Store) PlayerDuels(ctx context.Context, steamID uint64, f MatchFilter) (PlayerDuels, error) {
 	var r PlayerDuels
-	where, args := MatchFilter{From: f.From, To: f.To, SessionIDs: f.SessionIDs}.where("m", "s")
+	where, args := f.period().where("m", "s")
 	err := s.db.QueryRowContext(ctx, `
 		SELECT count(*), coalesce(sum(`+duelsCovered+`), 0),
 			count(DISTINCT CASE WHEN `+duelsCovered+` THEN m.session_id END)
@@ -149,7 +149,7 @@ func (s *Store) PlayerDuels(ctx context.Context, steamID uint64, f MatchFilter) 
 	}
 	r.Opponents = make([]Opponent, 0, len(cells))
 	for _, c := range cells {
-		name, err := s.latestName(ctx, c.Victim)
+		name, err := s.latestName(ctx, c.Victim, f.GroupID)
 		if err != nil {
 			return r, err
 		}
@@ -158,11 +158,12 @@ func (s *Store) PlayerDuels(ctx context.Context, steamID uint64, f MatchFilter) 
 	return r, nil
 }
 
-// latestName — ник игрока из его последнего матча с результатом (как в заголовке профиля).
-func (s *Store) latestName(ctx context.Context, steamID uint64) (string, error) {
+// latestName — ник игрока из его последнего матча с результатом в группе (как в заголовке профиля).
+func (s *Store) latestName(ctx context.Context, steamID uint64, groupID int64) (string, error) {
 	var name string
+	where, args := MatchFilter{GroupID: groupID}.where("m", "s")
 	err := s.db.QueryRowContext(ctx, `SELECT mp.name `+fromPlayerMatches+`
-		WHERE mp.steam_id = ? AND m.has_result = 1
-		ORDER BY s.date DESC, s.id DESC, m.ordinal DESC LIMIT 1`, int64(steamID)).Scan(&name)
+		WHERE mp.steam_id = ? AND `+where+`
+		ORDER BY s.date DESC, s.id DESC, m.ordinal DESC LIMIT 1`, append([]any{int64(steamID)}, args...)...).Scan(&name)
 	return name, err
 }

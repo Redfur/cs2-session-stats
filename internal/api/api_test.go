@@ -76,7 +76,7 @@ func TestSessions(t *testing.T) {
 	e := newTestEnv(t)
 
 	var sess store.Session
-	if code := e.do(t, "POST", "/api/sessions", "application/json", nil, &sess); code != 201 {
+	if code := e.do(t, "POST", "/api/groups/1/sessions", "application/json", nil, &sess); code != 201 {
 		t.Fatalf("создание без параметров: %d", code)
 	}
 	if sess.Date != "2026-10-09" || sess.Title != "" {
@@ -84,17 +84,17 @@ func TestSessions(t *testing.T) {
 	}
 
 	var errResp map[string]string
-	if code := e.do(t, "POST", "/api/sessions", "application/json", []byte(`{"date":"08.10.2026"}`), &errResp); code != 400 || errResp["error"] == "" {
+	if code := e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{"date":"08.10.2026"}`), &errResp); code != 400 || errResp["error"] == "" {
 		t.Errorf("неверная дата: %d %v", code, errResp)
 	}
 
-	e.do(t, "POST", "/api/sessions", "application/json", []byte(`{"date":"2026-10-10","title":" Микс "}`), &sess)
+	e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{"date":"2026-10-10","title":" Микс "}`), &sess)
 	if sess.Title != "Микс" {
 		t.Errorf("название не обрезано: %q", sess.Title)
 	}
 
 	var list []store.SessionSummary
-	if code := e.do(t, "GET", "/api/sessions", "", nil, &list); code != 200 || len(list) != 2 || list[0].Date != "2026-10-10" {
+	if code := e.do(t, "GET", "/api/groups/1/sessions", "", nil, &list); code != 200 || len(list) != 2 || list[0].Date != "2026-10-10" {
 		t.Errorf("список: %d %+v", code, list)
 	}
 
@@ -120,7 +120,7 @@ func multipartBody(t *testing.T, files map[string][]byte) (string, []byte) {
 func TestUploadAndViews(t *testing.T) {
 	e := newTestEnv(t)
 	var sess store.Session
-	e.do(t, "POST", "/api/sessions", "application/json", []byte(`{}`), &sess)
+	e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{}`), &sess)
 
 	ct, body := multipartBody(t, map[string][]byte{"a.dem": []byte("HL2DEMO fake"), "notes.txt": []byte("x")})
 	var errResp map[string]string

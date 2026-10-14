@@ -29,7 +29,7 @@ func extResult(trades int) MatchResult {
 func TestSaveMatchResultExt(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	id := addMatches(t, s, sess.ID, "x")[0]
 	tables := []string{"match_player_ext", "match_player_weapons", "match_rounds", "match_kills", "match_clutches"}
 	counts := func() []int {
@@ -102,7 +102,7 @@ func TestSaveMatchResultExt(t *testing.T) {
 func TestExtAggregates(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	ids := addMatches(t, s, sess.ID, "a", "b", "c")
 	if err := s.SaveMatchResult(ctx, ids[0], extResult(3), ExtendedSinceVersion); err != nil {
 		t.Fatal(err)
@@ -146,7 +146,7 @@ func TestExtAggregates(t *testing.T) {
 func TestDeleteMatchRemovesExt(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	id := addMatches(t, s, sess.ID, "x")[0]
 	if err := s.SaveMatchResult(ctx, id, extResult(1), ExtendedSinceVersion); err != nil {
 		t.Fatal(err)

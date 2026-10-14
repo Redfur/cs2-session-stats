@@ -49,8 +49,8 @@ func TestDuelsAPI(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
 	d := &duelSeed{t: t, e: e, names: map[uint64]string{duelA: "alpha", duelB: "bravo", duelC: "charlie"}}
-	s1, _ := e.store.CreateSession(ctx, "2026-10-01", "")
-	s2, _ := e.store.CreateSession(ctx, "2026-10-08", "")
+	s1, _ := e.store.CreateSession(ctx, 1, "2026-10-01", "")
+	s2, _ := e.store.CreateSession(ctx, 1, "2026-10-08", "")
 
 	// сессия 1: A против B и C — 1:0 и 12:3, затем 1:8 и 0:12; итог B 2:8 (доля 0.2), C 12:15
 	m1 := d.match(s1, store.DuelsSinceVersion, duelA, []uint64{duelB, duelC}, []int{1, 12}, []int{0, 3})
@@ -95,14 +95,14 @@ func TestDuelsAPI(t *testing.T) {
 	if code := e.do(t, "GET", "/api/sessions/999/duels", "", nil, &errResp); code != 404 {
 		t.Errorf("неизвестная сессия: %d", code)
 	}
-	empty, _ := e.store.CreateSession(ctx, "2026-10-09", "")
+	empty, _ := e.store.CreateSession(ctx, 1, "2026-10-09", "")
 	e.do(t, "GET", fmt.Sprintf("/api/sessions/%d/duels", empty.ID), "", nil, &sd)
 	if sd.Status != "no_matches" || sd.Players == nil || sd.Cells == nil || sd.UncoveredMatches == nil {
 		t.Errorf("пустая сессия: %+v", sd)
 	}
 
 	// профиль: B 2:8 (20%), C 12:15 (44%) — выигранных пар нет, проигрывает хуже всего B
-	path := fmt.Sprintf("/api/players/%d/duels", duelA)
+	path := fmt.Sprintf("/api/groups/1/players/%d/duels", duelA)
 	var pd playerDuelsResponse
 	if code := e.do(t, "GET", path+fmt.Sprintf("?session=%d", s1.ID), "", nil, &pd); code != 200 {
 		t.Fatalf("дуэли профиля: %d", code)
@@ -128,7 +128,7 @@ func TestDuelsAPI(t *testing.T) {
 	if code := e.do(t, "GET", path+"?from=2026-10-01&session=1", "", nil, &errResp); code != 400 {
 		t.Errorf("даты и сессии вместе: %d", code)
 	}
-	if code := e.do(t, "GET", "/api/players/76561198000000099/duels", "", nil, &errResp); code != 404 {
+	if code := e.do(t, "GET", "/api/groups/1/players/76561198000000099/duels", "", nil, &errResp); code != 404 {
 		t.Errorf("неизвестный игрок: %d", code)
 	}
 }
@@ -136,10 +136,10 @@ func TestDuelsAPI(t *testing.T) {
 func TestDuelsStatusUnavailable(t *testing.T) {
 	e := newTestEnv(t)
 	d := &duelSeed{t: t, e: e, names: map[uint64]string{duelA: "alpha", duelB: "bravo"}}
-	s, _ := e.store.CreateSession(context.Background(), "2026-10-01", "")
+	s, _ := e.store.CreateSession(context.Background(), 1, "2026-10-01", "")
 	d.match(s, store.DuelsSinceVersion-1, duelA, []uint64{duelB}, []int{3}, []int{1})
 	var pd playerDuelsResponse
-	e.do(t, "GET", fmt.Sprintf("/api/players/%d/duels", duelA), "", nil, &pd)
+	e.do(t, "GET", fmt.Sprintf("/api/groups/1/players/%d/duels", duelA), "", nil, &pd)
 	if pd.Status != "unavailable" || len(pd.Opponents) != 0 {
 		t.Errorf("только старые матчи: %+v", pd)
 	}
@@ -154,10 +154,10 @@ func TestPlayerDuelsByShare(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
 	d := &duelSeed{t: t, e: e, names: map[uint64]string{duelA: "alpha", duelB: "bravo", duelC: "charlie", duelD: "delta", duelE: "echo"}}
-	path := fmt.Sprintf("/api/players/%d/duels", duelA)
+	path := fmt.Sprintf("/api/groups/1/players/%d/duels", duelA)
 	get := func(opp []uint64, kills, deaths []int) playerDuelsResponse {
 		t.Helper()
-		sess, _ := e.store.CreateSession(ctx, "2026-10-01", "")
+		sess, _ := e.store.CreateSession(ctx, 1, "2026-10-01", "")
 		d.match(sess, store.DuelsSinceVersion, duelA, opp, kills, deaths)
 		var pd playerDuelsResponse
 		if code := e.do(t, "GET", path+fmt.Sprintf("?session=%d", sess.ID), "", nil, &pd); code != 200 {

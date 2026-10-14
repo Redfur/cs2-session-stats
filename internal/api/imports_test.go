@@ -42,7 +42,7 @@ func (f *fakeImports) CancelSession(id int64) {
 
 func TestAddImports(t *testing.T) {
 	e := newTestEnv(t)
-	sess, _ := e.store.CreateSession(context.Background(), "2026-10-09", "")
+	sess, _ := e.store.CreateSession(context.Background(), 1, "2026-10-09", "")
 	path := "/api/sessions/" + strconv.FormatInt(sess.ID, 10) + "/imports"
 
 	e.imports.results = []importer.AddResult{
@@ -86,7 +86,7 @@ func TestAddImports(t *testing.T) {
 func TestImportRetryDeleteAndSessionView(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
-	sess, _ := e.store.CreateSession(ctx, "2026-10-09", "")
+	sess, _ := e.store.CreateSession(ctx, 1, "2026-10-09", "")
 	queued, _ := e.store.AddImport(ctx, sess.ID, "https://cs2.fastcup.net/matches/1", "fastcup", "1")
 	failed, _ := e.store.AddImport(ctx, sess.ID, "https://cs2.fastcup.net/matches/2", "fastcup", "2")
 	done, _ := e.store.AddImport(ctx, sess.ID, "https://cs2.fastcup.net/matches/3", "fastcup", "3")

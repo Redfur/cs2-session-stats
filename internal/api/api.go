@@ -37,8 +37,13 @@ type Server struct {
 // Handler возвращает маршруты API; остальные пути обслуживает static (фронтенд).
 func (s *Server) Handler(static http.Handler) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/sessions", s.listSessions)
-	mux.HandleFunc("POST /api/sessions", s.createSession)
+	mux.HandleFunc("GET /api/groups", s.listGroups)
+	mux.HandleFunc("POST /api/groups", s.createGroup)
+	mux.HandleFunc("GET /api/groups/{gid}", s.getGroup)
+	mux.HandleFunc("PATCH /api/groups/{gid}", s.renameGroup)
+	mux.HandleFunc("DELETE /api/groups/{gid}", s.deleteGroup)
+	mux.HandleFunc("GET /api/groups/{gid}/sessions", s.listSessions)
+	mux.HandleFunc("POST /api/groups/{gid}/sessions", s.createSession)
 	mux.HandleFunc("GET /api/sessions/{id}", s.getSession)
 	mux.HandleFunc("PATCH /api/sessions/{id}", s.updateSession)
 	mux.HandleFunc("DELETE /api/sessions/{id}", s.deleteSession)
@@ -51,14 +56,14 @@ func (s *Server) Handler(static http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/matches/{id}", s.deleteMatch)
 	mux.HandleFunc("POST /api/matches/{id}/reparse", s.reparseMatch)
 	mux.HandleFunc("POST /api/sessions/{id}/reparse", s.reparseSession)
-	mux.HandleFunc("GET /api/players", s.listPlayers)
-	mux.HandleFunc("GET /api/players/{steamId}", s.getPlayer)
+	mux.HandleFunc("GET /api/groups/{gid}/players", s.listPlayers)
+	mux.HandleFunc("GET /api/groups/{gid}/players/{steamId}", s.getPlayer)
 	mux.HandleFunc("GET /api/matches/{id}/duels", s.getMatchDuels)
 	mux.HandleFunc("GET /api/sessions/{id}/duels", s.getSessionDuels)
-	mux.HandleFunc("GET /api/players/{steamId}/duels", s.getPlayerDuels)
-	mux.HandleFunc("GET /api/players/{steamId}/fight", s.getPlayerFight)
-	mux.HandleFunc("GET /api/players/{steamId}/weapons", s.getPlayerWeapons)
-	mux.HandleFunc("GET /api/players/{steamId}/utility", s.getPlayerUtility)
+	mux.HandleFunc("GET /api/groups/{gid}/players/{steamId}/duels", s.getPlayerDuels)
+	mux.HandleFunc("GET /api/groups/{gid}/players/{steamId}/fight", s.getPlayerFight)
+	mux.HandleFunc("GET /api/groups/{gid}/players/{steamId}/weapons", s.getPlayerWeapons)
+	mux.HandleFunc("GET /api/groups/{gid}/players/{steamId}/utility", s.getPlayerUtility)
 	mux.HandleFunc("GET /api/matches/{id}/ext", s.getMatchExt)
 	mux.HandleFunc("GET /api/sessions/{id}/ext", s.getSessionExt)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +88,11 @@ type sessionSummaryView struct {
 }
 
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
-	list, err := s.Store.ListSessions(r.Context())
+	gid, ok := s.groupFromPath(w, r)
+	if !ok {
+		return
+	}
+	list, err := s.Store.ListSessions(r.Context(), gid)
 	if err != nil {
 		s.internalError(w, err)
 		return
@@ -126,6 +135,10 @@ type createSessionRequest struct {
 }
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
+	gid, ok := s.groupFromPath(w, r)
+	if !ok {
+		return
+	}
 	var req createSessionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		writeError(w, http.StatusBadRequest, "некорректный JSON")
@@ -138,7 +151,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
-	sess, err := s.Store.CreateSession(r.Context(), req.Date, req.Title)
+	sess, err := s.Store.CreateSession(r.Context(), gid, req.Date, req.Title)
 	if err != nil {
 		s.internalError(w, err)
 		return
@@ -282,7 +295,7 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, err)
 		return
 	}
-	book, err := s.ratingBook(r.Context())
+	book, err := s.ratingBook(r.Context(), sess.GroupID)
 	if err != nil {
 		s.internalError(w, err)
 		return
@@ -341,6 +354,7 @@ func (s *Server) uploadDemos(w http.ResponseWriter, r *http.Request) {
 }
 
 type matchResponse struct {
+	GroupID int64        `json:"groupId"` // группа сессии матча
 	Match   store.Match  `json:"match"`
 	Players []PlayerView `json:"players"`
 	Teams   teamsOVRView `json:"teams"` // средний OVR команд перед матчем
@@ -356,12 +370,17 @@ func (s *Server) getMatch(w http.ResponseWriter, r *http.Request) {
 		s.storeError(w, err, "матч не найден")
 		return
 	}
+	sess, err := s.Store.GetSession(r.Context(), m.SessionID)
+	if err != nil {
+		s.internalError(w, err)
+		return
+	}
 	ps, err := s.Store.MatchPlayers(r.Context(), id)
 	if err != nil {
 		s.internalError(w, err)
 		return
 	}
-	book, err := s.ratingBook(r.Context())
+	book, err := s.ratingBook(r.Context(), sess.GroupID)
 	if err != nil {
 		s.internalError(w, err)
 		return
@@ -372,7 +391,7 @@ func (s *Server) getMatch(w http.ResponseWriter, r *http.Request) {
 		ids[i] = steamIDOf(p)
 	}
 	teams := withMatchRating(book, id, players, ids)
-	writeJSON(w, http.StatusOK, matchResponse{Match: m, Players: players, Teams: teams})
+	writeJSON(w, http.StatusOK, matchResponse{GroupID: sess.GroupID, Match: m, Players: players, Teams: teams})
 }
 
 // sortScoreboard — игроки матча в порядке scoreboard: команда A, затем B, внутри — по rating.

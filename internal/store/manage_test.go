@@ -63,8 +63,8 @@ func countRows(t *testing.T, s *Store, query string, args ...any) int {
 func TestUpdateSession(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	a, _ := s.CreateSession(ctx, "2026-10-08", "Четверг")
-	b, _ := s.CreateSession(ctx, "2026-10-09", "")
+	a, _ := s.CreateSession(ctx, 1, "2026-10-08", "Четверг")
+	b, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
 
 	got, err := s.UpdateSession(ctx, a.ID, "2026-10-10", "Пятничный микс")
 	if err != nil {
@@ -73,7 +73,7 @@ func TestUpdateSession(t *testing.T) {
 	if got.Date != "2026-10-10" || got.Title != "Пятничный микс" || got.CreatedAt != a.CreatedAt {
 		t.Fatalf("неверный результат: %+v", got)
 	}
-	list, _ := s.ListSessions(ctx)
+	list, _ := s.ListSessions(ctx, 1)
 	if list[0].ID != a.ID || list[1].ID != b.ID {
 		t.Fatalf("список не пересортирован по новой дате: %+v", list)
 	}
@@ -85,8 +85,8 @@ func TestUpdateSession(t *testing.T) {
 func TestReorderMatches(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
-	other, _ := s.CreateSession(ctx, "2026-10-09", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	other, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
 	ids := addMatches(t, s, sess.ID, "A", "B", "C")
 	foreign := addMatches(t, s, other.ID, "D")
 
@@ -136,7 +136,7 @@ func TestReorderMatches(t *testing.T) {
 func TestDeleteMatch(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	ids := addMatches(t, s, sess.ID, "A", "B", "C")
 	const alice = 76561198000000001
 	for i, id := range ids {
@@ -182,9 +182,9 @@ func TestDeleteMatch(t *testing.T) {
 func TestDeleteSession(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
-	other, _ := s.CreateSession(ctx, "2026-10-09", "")
-	empty, _ := s.CreateSession(ctx, "2026-10-10", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	other, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
+	empty, _ := s.CreateSession(ctx, 1, "2026-10-10", "")
 	ids := addMatches(t, s, sess.ID, "A", "B")
 	otherIDs := addMatches(t, s, other.ID, "C")
 	p := stats.PlayerStats{SteamID: 1, Name: "x", Team: "A", Result: stats.Win, Counters: stats.Counters{Rounds: 5}}

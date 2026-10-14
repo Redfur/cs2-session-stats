@@ -10,14 +10,14 @@ import (
 // last20Matches — сколько последних матчей входит в «Среднее за 20».
 const last20Matches = 20
 
-// ratingBook считает историю OVR всех игроков по всем матчам с результатом.
+// ratingBook считает историю OVR игроков группы по её матчам с результатом.
 // Расчёт идёт на каждый запрос: матчей сотни, а перестановка и пересчёт сразу видны.
-func (s *Server) ratingBook(ctx context.Context) (*rating.Book, error) {
-	rows, err := s.Store.RatingRows(ctx)
+func (s *Server) ratingBook(ctx context.Context, groupID int64) (*rating.Book, error) {
+	rows, err := s.Store.RatingRows(ctx, groupID)
 	if err != nil {
 		return nil, err
 	}
-	swings, err := s.Store.RatingSwing(ctx)
+	swings, err := s.Store.RatingSwing(ctx, groupID)
 	if err != nil {
 		return nil, err
 	}

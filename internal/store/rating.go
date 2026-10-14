@@ -6,15 +6,17 @@ import (
 	"cs2stats/internal/rating"
 )
 
-// RatingRows возвращает строки всех игроков во всех матчах с результатом в порядке игры:
+// RatingRows возвращает строки всех игроков во всех матчах группы с результатом в порядке игры:
 // по дате сессии, порядку создания сессий с одной датой и номеру матча. Строки одного матча
-// идут подряд. Фильтры не применяются: OVR всегда считается по всей истории.
-func (s *Store) RatingRows(ctx context.Context) ([]rating.MatchRow, error) {
+// идут подряд. Фильтры периода не применяются: OVR всегда считается по всей истории группы.
+// groupID = 0 — без ограничения группой.
+func (s *Store) RatingRows(ctx context.Context, groupID int64) ([]rating.MatchRow, error) {
+	where, args := MatchFilter{GroupID: groupID}.where("m", "s")
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT m.id, m.session_id, mp.steam_id, mp.team, `+counterColumns+`
 		`+fromPlayerMatches+`
-		WHERE m.has_result = 1
-		ORDER BY s.date, s.id, m.ordinal, m.id, mp.steam_id`)
+		WHERE `+where+`
+		ORDER BY s.date, s.id, m.ordinal, m.id, mp.steam_id`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -35,12 +37,15 @@ func (s *Store) RatingRows(ctx context.Context) ([]rating.MatchRow, error) {
 // RatingSwing возвращает данные Round Swing матчей с результатом, обработанных версией не ниже
 // SwingSinceVersion: раунды по номеру со снаряжением и временем установки бомбы и убийства каждого
 // раунда в порядке времени. У остальных матчей данных нет, их значение для OVR — Rating 2.0.
-func (s *Store) RatingSwing(ctx context.Context) (map[int64]rating.SwingMatch, error) {
+// Только матчи группы groupID; 0 — без ограничения группой.
+func (s *Store) RatingSwing(ctx context.Context, groupID int64) (map[int64]rating.SwingMatch, error) {
+	where, args := MatchFilter{GroupID: groupID}.where("m", "s")
+	args = append(args, SwingSinceVersion)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT r.match_id, r.number, r.winner, r.side_a, r.equip_a, r.equip_b, r.plant_ms, r.restored
-		FROM match_rounds r JOIN matches m ON m.id = r.match_id
-		WHERE m.has_result = 1 AND m.result_version >= ?
-		ORDER BY r.match_id, r.number`, SwingSinceVersion)
+		FROM match_rounds r JOIN matches m ON m.id = r.match_id JOIN sessions s ON s.id = m.session_id
+		WHERE `+where+` AND m.result_version >= ?
+		ORDER BY r.match_id, r.number`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -64,9 +69,9 @@ func (s *Store) RatingSwing(ctx context.Context) (map[int64]rating.SwingMatch, e
 
 	kills, err := s.db.QueryContext(ctx, `
 		SELECT k.match_id, k.round, k.time_ms, k.killer_id, k.victim_id, k.assister_id
-		FROM match_kills k JOIN matches m ON m.id = k.match_id
-		WHERE m.has_result = 1 AND m.result_version >= ?
-		ORDER BY k.match_id, k.round, k.time_ms, k.seq`, SwingSinceVersion)
+		FROM match_kills k JOIN matches m ON m.id = k.match_id JOIN sessions s ON s.id = m.session_id
+		WHERE `+where+` AND m.result_version >= ?
+		ORDER BY k.match_id, k.round, k.time_ms, k.seq`, args...)
 	if err != nil {
 		return nil, err
 	}

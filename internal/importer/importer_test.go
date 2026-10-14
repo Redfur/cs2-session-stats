@@ -88,7 +88,7 @@ func newEnv(t *testing.T, maxSize int64) *env {
 	demos, _ := ingest.NewLocalStorage(filepath.Join(dir, "demos"))
 	tmp := filepath.Join(dir, "tmp")
 	os.MkdirAll(tmp, 0o755)
-	sess, _ := st.CreateSession(context.Background(), "2026-10-08", "Вечер")
+	sess, _ := st.CreateSession(context.Background(), 1, "2026-10-08", "Вечер")
 
 	e := &env{st: st, fake: &fakePlatform{matches: map[string]Match{}, errs: map[string]error{}}, session: sess.ID, files: map[string]http.HandlerFunc{}}
 	e.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

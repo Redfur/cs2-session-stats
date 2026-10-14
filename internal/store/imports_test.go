@@ -21,7 +21,7 @@ func addImport(t *testing.T, s *Store, sessionID int64, ext string) Import {
 func TestImportQueue(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 
 	a := addImport(t, s, sess.ID, "1")
 	b := addImport(t, s, sess.ID, "2")
@@ -79,7 +79,7 @@ func TestImportQueue(t *testing.T) {
 func TestListSessionImports(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	queued := addImport(t, s, sess.ID, "1")
 	accepted := addImport(t, s, sess.ID, "2")
 	dup := addImport(t, s, sess.ID, "3")
@@ -104,7 +104,7 @@ func TestListSessionImports(t *testing.T) {
 func TestDeleteImportKeepsMatches(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	x := addImport(t, s, sess.ID, "27802385")
 	m, err := s.AddMatchFrom(ctx, sess.ID, "sha", "a.dem", &MatchSource{ImportID: &x.ID, Platform: "fastcup", Number: 27802385, Map: 1, PlayedAt: time.Now()})
 	if err != nil {
@@ -131,7 +131,7 @@ func TestDeleteImportKeepsMatches(t *testing.T) {
 func TestDeleteSessionDeletesImports(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	x := addImport(t, s, sess.ID, "1")
 	if _, err := s.DeleteSession(ctx, sess.ID); err != nil {
 		t.Fatal(err)
@@ -144,8 +144,8 @@ func TestDeleteSessionDeletesImports(t *testing.T) {
 func TestFindImportSource(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
-	other, _ := s.CreateSession(ctx, "2026-10-09", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	other, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
 
 	src, err := s.FindImportSource(ctx, sess.ID, "fastcup", "1", 1)
 	if err != nil || src.Active != nil || src.Match != nil || src.Failed != nil {
@@ -257,7 +257,7 @@ func TestAddMatchByPlayedAt(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			s := openTest(t)
-			sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+			sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 			for _, a := range c.adds {
 				if _, err := s.AddMatchFrom(ctx, sess.ID, a.sha, a.sha+".dem", a.src); err != nil {
 					t.Fatal(err)
@@ -274,7 +274,7 @@ func TestAddMatchByPlayedAt(t *testing.T) {
 func TestAddMatchByPlayedAtAfterReorder(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	at := func(h int) time.Time { return time.Date(2026, 10, 8, h, 0, 0, 0, time.UTC) }
 	a, _ := s.AddMatchFrom(ctx, sess.ID, "A", "a", &MatchSource{Platform: "fastcup", Number: 1, Map: 1, PlayedAt: at(20)})
 	b, _ := s.AddMatchFrom(ctx, sess.ID, "B", "b", &MatchSource{Platform: "fastcup", Number: 2, Map: 1, PlayedAt: at(22)})

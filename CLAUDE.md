@@ -53,8 +53,9 @@ internal/rating    OVR игроков: Build(матчи в порядке игр
 internal/ingest    приём файла: формат, распаковка gz/bz2/zst/zip, лимит, sha256, дедуп; Storage (LocalStorage)
 internal/importer  импорт по ссылке: Platform (FastCup, Cybershoke), проверка ссылок (Add), фоновое скачивание (Run), архивы серий
 internal/worker    очередь матчей; ProcessingVersion; пересчёт устаревших при старте
-internal/store     SQLite: sessions, matches, match_players, imports; миграции migrations/NNN_*.sql через PRAGMA user_version
-internal/api       JSON API на net/http ServeMux; PlayerView для вывода
+internal/store     SQLite: groups, sessions, matches, match_players, imports; миграции migrations/NNN_*.sql через PRAGMA user_version
+internal/api       JSON API на net/http ServeMux; PlayerView для вывода. Группы и всё «по группе» — /api/groups/{gid}/sessions|players…;
+                   сессии, матчи и загрузки — по своему id (/api/sessions/{id}, /api/matches/{id}, /api/imports/{id})
 internal/webui     раздача SPA: embed при -tags embedweb, иначе с диска (STATIC_DIR)
 web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI + lucide-react; страницы /, /sessions/:id, /matches/:id, /players, /players/:id[/fight|weapons|utility]
   src/index.css      токены дизайна (@theme), шрифты Manrope и JetBrains Mono самохостом (@fontsource-variable)
@@ -71,6 +72,7 @@ web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI 
 
 ## Ключевые решения и инварианты
 
+- **Статистика и рейтинг — по группе.** Сессия принадлежит одной группе (`sessions.group_id`, миграция 007; в схеме NULL допустим из-за ограничения `ADD COLUMN … REFERENCES`, `NOT NULL` обеспечивает `CreateSession`). Таблица игроков, профиль и его вкладки, дуэли профиля и OVR считаются по матчам группы: `MatchFilter.GroupID`, `RatingRows`/`RatingSwing(groupID)`, `api.ratingBook(ctx, groupID)`; для сессии и матча группа берётся из сессии. Группа удаляется только без сессий (`ErrGroupNotEmpty`, 409). Дедупликация демок и ссылок остаётся глобальной. Владельцев и прав у групп пока нет.
 - **Сессию создаёт пользователь** (дата + название). В демках CS2 нет даты матча, поэтому группировать по времени нельзя. Порядок матчей (`ordinal`) — порядок загрузки файлов, а матчи из ссылок встают по времени игры у платформы.
 - **В БД хранятся только сырые счётчики** (`stats.Counters`). ADR, KAST%, HS%, K/D и rating считаются при чтении. Агрегаты сессии — суммы счётчиков, поэтому они автоматически взвешены по раундам. Rating — восстановленный HLTV Rating 2.0 (`Counters.Rating`), 1.0 остался как `Counters.Rating1` для сравнения.
 - **`worker.ProcessingVersion`.** Поднимать при любом изменении `internal/parser`/`internal/stats`, которое меняет сохраняемые счётчики: при старте сервис сам пересчитает старые матчи. Для изменения формул производных показателей поднимать не нужно.

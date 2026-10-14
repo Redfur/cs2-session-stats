@@ -30,9 +30,9 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := context.Background()
 	f := &fixture{s: openTest(t)}
-	f.s1, _ = f.s.CreateSession(ctx, "2026-09-20", "")
-	f.s2, _ = f.s.CreateSession(ctx, "2026-10-01", "")
-	f.s3, _ = f.s.CreateSession(ctx, "2026-10-08", "четверг")
+	f.s1, _ = f.s.CreateSession(ctx, 1, "2026-09-20", "")
+	f.s2, _ = f.s.CreateSession(ctx, 1, "2026-10-01", "")
+	f.s3, _ = f.s.CreateSession(ctx, 1, "2026-10-08", "четверг")
 	type pl struct {
 		id   uint64
 		name string
@@ -147,7 +147,7 @@ func TestPlayerTotalsName(t *testing.T) {
 	}
 
 	// при равной дате последней считается сессия, созданная позже, даже если её матч загружен раньше
-	later, _ := f.s.CreateSession(ctx, "2026-10-08", "")
+	later, _ := f.s.CreateSession(ctx, 1, "2026-10-08", "")
 	m, _ := f.s.AddMatch(ctx, later.ID, "late", "m.dem")
 	f.s.SaveMatchResult(ctx, m.ID, MatchResult{Rounds: 1, Players: []stats.PlayerStats{{SteamID: pA, Name: "gamma"}}}, 1)
 	if n := name(MatchFilter{}); n != "gamma" {
@@ -226,7 +226,7 @@ func TestPlayerProfileQueries(t *testing.T) {
 func TestPlayerTotalsOnlyFailed(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	m1, _ := s.AddMatch(ctx, sess.ID, "ok", "m.dem")
 	s.SaveMatchResult(ctx, m1.ID, MatchResult{Rounds: 1, Players: []stats.PlayerStats{{SteamID: pA, Name: "a"}}}, 1)
 	// матч, пересчёт которого упал, сохраняет результат и остаётся в выборке

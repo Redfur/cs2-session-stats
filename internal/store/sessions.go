@@ -9,6 +9,7 @@ import (
 
 type Session struct {
 	ID        int64  `json:"id"`
+	GroupID   int64  `json:"groupId"`
 	Date      string `json:"date"` // YYYY-MM-DD
 	Title     string `json:"title"`
 	CreatedAt string `json:"createdAt"`
@@ -21,12 +22,12 @@ type SessionSummary struct {
 	Maps        []string `json:"maps"`        // карты матчей с результатом по порядку, без повторов
 }
 
-// CreateSession создаёт сессию. Дату валидирует вызывающий код.
-func (s *Store) CreateSession(ctx context.Context, date, title string) (Session, error) {
-	sess := Session{Date: date, Title: title, CreatedAt: s.timestamp()}
+// CreateSession создаёт сессию в группе. Дату и существование группы проверяет вызывающий код.
+func (s *Store) CreateSession(ctx context.Context, groupID int64, date, title string) (Session, error) {
+	sess := Session{GroupID: groupID, Date: date, Title: title, CreatedAt: s.timestamp()}
 	res, err := s.db.ExecContext(ctx,
-		"INSERT INTO sessions (date, title, created_at) VALUES (?, ?, ?)",
-		sess.Date, sess.Title, sess.CreatedAt)
+		"INSERT INTO sessions (group_id, date, title, created_at) VALUES (?, ?, ?, ?)",
+		sess.GroupID, sess.Date, sess.Title, sess.CreatedAt)
 	if err != nil {
 		return Session{}, err
 	}
@@ -34,13 +35,14 @@ func (s *Store) CreateSession(ctx context.Context, date, title string) (Session,
 	return sess, err
 }
 
-// ListSessions возвращает сессии от новых к старым со сводкой по матчам.
-func (s *Store) ListSessions(ctx context.Context) ([]SessionSummary, error) {
+// ListSessions возвращает сессии группы от новых к старым со сводкой по матчам.
+func (s *Store) ListSessions(ctx context.Context, groupID int64) ([]SessionSummary, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT s.id, s.date, s.title, s.created_at, count(m.id), coalesce(sum(m.status = ?), 0)
+		SELECT `+sessionColumns+`, count(m.id), coalesce(sum(m.status = ?), 0)
 		FROM sessions s LEFT JOIN matches m ON m.session_id = s.id
+		WHERE s.group_id = ?
 		GROUP BY s.id
-		ORDER BY s.date DESC, s.id DESC`, StatusFailed)
+		ORDER BY s.date DESC, s.id DESC`, StatusFailed, groupID)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +51,7 @@ func (s *Store) ListSessions(ctx context.Context) ([]SessionSummary, error) {
 	byID := map[int64]*SessionSummary{}
 	for rows.Next() {
 		x := SessionSummary{Maps: []string{}}
-		if err := rows.Scan(&x.ID, &x.Date, &x.Title, &x.CreatedAt, &x.MatchCount, &x.FailedCount); err != nil {
+		if err := rows.Scan(append(sessionTargets(&x.Session), &x.MatchCount, &x.FailedCount)...); err != nil {
 			return nil, err
 		}
 		list = append(list, x)
@@ -60,13 +62,14 @@ func (s *Store) ListSessions(ctx context.Context) ([]SessionSummary, error) {
 	for i := range list {
 		byID[list[i].ID] = &list[i]
 	}
-	return list, s.fillSessionMaps(ctx, byID)
+	return list, s.fillSessionMaps(ctx, groupID, byID)
 }
 
 // fillSessionMaps добавляет сессиям карты матчей с результатом в порядке номеров, без повторов.
-func (s *Store) fillSessionMaps(ctx context.Context, byID map[int64]*SessionSummary) error {
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT session_id, map FROM matches WHERE has_result = 1 ORDER BY session_id, ordinal")
+func (s *Store) fillSessionMaps(ctx context.Context, groupID int64, byID map[int64]*SessionSummary) error {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT m.session_id, m.map FROM matches m JOIN sessions s ON s.id = m.session_id
+		WHERE m.has_result = 1 AND s.group_id = ? ORDER BY m.session_id, m.ordinal`, groupID)
 	if err != nil {
 		return err
 	}
@@ -86,11 +89,18 @@ func (s *Store) fillSessionMaps(ctx context.Context, byID map[int64]*SessionSumm
 	return rows.Err()
 }
 
+// sessionColumns — колонки Session по псевдониму s; читаются через sessionTargets.
+const sessionColumns = "s.id, coalesce(s.group_id, 0), s.date, s.title, s.created_at"
+
+func sessionTargets(x *Session) []any {
+	return []any{&x.ID, &x.GroupID, &x.Date, &x.Title, &x.CreatedAt}
+}
+
 func (s *Store) GetSession(ctx context.Context, id int64) (Session, error) {
 	var x Session
 	err := s.db.QueryRowContext(ctx,
-		"SELECT id, date, title, created_at FROM sessions WHERE id = ?", id).
-		Scan(&x.ID, &x.Date, &x.Title, &x.CreatedAt)
+		"SELECT "+sessionColumns+" FROM sessions s WHERE s.id = ?", id).
+		Scan(sessionTargets(&x)...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Session{}, ErrNotFound
 	}
@@ -101,9 +111,9 @@ func (s *Store) GetSession(ctx context.Context, id int64) (Session, error) {
 func (s *Store) UpdateSession(ctx context.Context, id int64, date, title string) (Session, error) {
 	var x Session
 	err := s.db.QueryRowContext(ctx,
-		"UPDATE sessions SET date = ?, title = ? WHERE id = ? RETURNING id, date, title, created_at",
+		"UPDATE sessions SET date = ?, title = ? WHERE id = ? RETURNING id, coalesce(group_id, 0), date, title, created_at",
 		date, title, id).
-		Scan(&x.ID, &x.Date, &x.Title, &x.CreatedAt)
+		Scan(sessionTargets(&x)...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Session{}, ErrNotFound
 	}

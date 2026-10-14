@@ -66,7 +66,7 @@ func TestWorker(t *testing.T) {
 	}
 	defer st.Close()
 	ctx := context.Background()
-	sess, _ := st.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := st.CreateSession(ctx, 1, "2026-10-08", "")
 
 	// матч «застрял» в parsing из-за перезапуска
 	stuck, _ := st.AddMatch(ctx, sess.ID, "ok-1", "1.dem")
@@ -116,7 +116,7 @@ func TestShutdownDuringParse(t *testing.T) {
 	}
 	defer st.Close()
 	ctx := context.Background()
-	sess, _ := st.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := st.CreateSession(ctx, 1, "2026-10-08", "")
 	m, _ := st.AddMatch(ctx, sess.ID, "slow", "slow.dem")
 
 	started, release := make(chan struct{}), make(chan struct{})
@@ -170,7 +170,7 @@ func runWorker(t *testing.T, st *store.Store) *Worker {
 func TestRequeueOutdatedOnStart(t *testing.T) {
 	st := openStore(t)
 	ctx := context.Background()
-	sess, _ := st.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := st.CreateSession(ctx, 1, "2026-10-08", "")
 	old, _ := st.AddMatch(ctx, sess.ID, "ok-old", "old.dem")
 	cur, _ := st.AddMatch(ctx, sess.ID, "ok-cur", "cur.dem")
 	for _, x := range []struct {
@@ -205,7 +205,7 @@ func TestRequeueOutdatedOnStart(t *testing.T) {
 func TestMissingDemoKeepsResult(t *testing.T) {
 	st := openStore(t)
 	ctx := context.Background()
-	sess, _ := st.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := st.CreateSession(ctx, 1, "2026-10-08", "")
 	m, _ := st.AddMatch(ctx, sess.ID, "missing", "m.dem")
 	st.ClaimNextPending(ctx)
 	players := []stats.PlayerStats{{SteamID: 1, Name: "a", Team: "A", Result: stats.Win, Counters: stats.Counters{Rounds: 5, Kills: 4}}}
@@ -232,7 +232,7 @@ func TestMatchDeletedDuringProcessing(t *testing.T) {
 	}
 	defer st.Close()
 	ctx := context.Background()
-	sess, _ := st.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := st.CreateSession(ctx, 1, "2026-10-08", "")
 	deleted, _ := st.AddMatch(ctx, sess.ID, "block", "1.dem")
 	next, _ := st.AddMatch(ctx, sess.ID, "ok-2", "2.dem")
 

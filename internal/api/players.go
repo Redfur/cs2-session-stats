@@ -85,17 +85,22 @@ type playersResponse struct {
 }
 
 func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
+	gid, ok := s.groupFromPath(w, r)
+	if !ok {
+		return
+	}
 	f, minMatches, err := parsePlayersQuery(r.URL.Query())
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	f.GroupID = gid
 	list, err := s.Store.PlayerTotals(r.Context(), f, minMatches)
 	if err != nil {
 		s.internalError(w, err)
 		return
 	}
-	book, err := s.ratingBook(r.Context())
+	book, err := s.ratingBook(r.Context(), gid)
 	if err != nil {
 		s.internalError(w, err)
 		return
@@ -105,6 +110,36 @@ func (s *Server) listPlayers(w http.ResponseWriter, r *http.Request) {
 		players[i].OVR = playerOVR(book, steamIDOf(players[i]))
 	}
 	writeJSON(w, http.StatusOK, playersResponse{Players: players})
+}
+
+// playerRequest разбирает запрос профиля игрока в группе: группу, SteamID и период.
+// name — ник из последнего матча игрока в группе без учёта периода. Игрок без матчей
+// с результатом в группе — 404. ok=false — ответ уже записан.
+func (s *Server) playerRequest(w http.ResponseWriter, r *http.Request) (steamID uint64, f store.MatchFilter, name string, ok bool) {
+	gid, ok := s.groupFromPath(w, r)
+	if !ok {
+		return
+	}
+	steamID, err := strconv.ParseUint(r.PathValue("steamId"), 10, 64)
+	if err != nil || steamID == 0 {
+		writeError(w, http.StatusBadRequest, "некорректный SteamID")
+		return 0, f, "", false
+	}
+	if f, err = parsePeriod(r.URL.Query()); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return 0, f, "", false
+	}
+	f.GroupID = gid
+	all, err := s.Store.PlayerTotals(r.Context(), store.MatchFilter{GroupID: gid, PlayerIDs: []uint64{steamID}}, 1)
+	if err != nil {
+		s.internalError(w, err)
+		return 0, f, "", false
+	}
+	if len(all) == 0 {
+		writeError(w, http.StatusNotFound, "игрок не найден")
+		return 0, f, "", false
+	}
+	return steamID, f, all[0].Name, true
 }
 
 type profileSession struct {
@@ -143,28 +178,11 @@ type profileResponse struct {
 }
 
 func (s *Server) getPlayer(w http.ResponseWriter, r *http.Request) {
-	steamID, err := strconv.ParseUint(r.PathValue("steamId"), 10, 64)
-	if err != nil || steamID == 0 {
-		writeError(w, http.StatusBadRequest, "некорректный SteamID")
-		return
-	}
-	f, err := parsePeriod(r.URL.Query())
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	steamID, f, name, ok := s.playerRequest(w, r)
+	if !ok {
 		return
 	}
 	ctx := r.Context()
-	// ник для заголовка — из последнего матча игрока без учёта периода
-	all, err := s.Store.PlayerTotals(ctx, store.MatchFilter{PlayerIDs: []uint64{steamID}}, 1)
-	if err != nil {
-		s.internalError(w, err)
-		return
-	}
-	if len(all) == 0 {
-		writeError(w, http.StatusNotFound, "игрок не найден")
-		return
-	}
-	name := all[0].Name
 
 	f.PlayerIDs = []uint64{steamID}
 	totals, err := s.Store.PlayerTotals(ctx, f, 1)
@@ -192,7 +210,7 @@ func (s *Server) getPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	book, err := s.ratingBook(ctx)
+	book, err := s.ratingBook(ctx, f.GroupID)
 	if err != nil {
 		s.internalError(w, err)
 		return

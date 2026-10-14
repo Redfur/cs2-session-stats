@@ -14,18 +14,18 @@ func TestSessionsList(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
 
-	list, err := s.ListSessions(ctx)
+	list, err := s.ListSessions(ctx, 1)
 	if err != nil || len(list) != 0 {
 		t.Fatalf("пустой список: %v, %v", list, err)
 	}
 
-	old, _ := s.CreateSession(ctx, "2026-10-01", "")
-	recent, _ := s.CreateSession(ctx, "2026-10-08", "Четверговый микс")
+	old, _ := s.CreateSession(ctx, 1, "2026-10-01", "")
+	recent, _ := s.CreateSession(ctx, 1, "2026-10-08", "Четверговый микс")
 	if _, err := s.AddMatch(ctx, recent.ID, "sha-1", "a.dem"); err != nil {
 		t.Fatal(err)
 	}
 
-	list, err = s.ListSessions(ctx)
+	list, err = s.ListSessions(ctx, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,8 +44,8 @@ func TestSessionsList(t *testing.T) {
 func TestAddMatchOrdinalAndDuplicate(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
-	other, _ := s.CreateSession(ctx, "2026-10-09", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	other, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
 
 	// первая загрузка: A, B; догрузка: C
 	for i, sha := range []string{"A", "B", "C"} {
@@ -81,7 +81,7 @@ func TestAddMatchOrdinalAndDuplicate(t *testing.T) {
 func TestQueueLifecycle(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	m1, _ := s.AddMatch(ctx, sess.ID, "1", "1.dem")
 	m2, _ := s.AddMatch(ctx, sess.ID, "2", "2.dem")
 
@@ -135,7 +135,7 @@ func TestQueueLifecycle(t *testing.T) {
 func TestFailKeepsPreviousResult(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	m, _ := s.AddMatch(ctx, sess.ID, "x", "x.dem")
 	if m.HasResult || m.ProcessedVersion != 0 {
 		t.Fatalf("новый матч: %+v", m)
@@ -165,7 +165,7 @@ func TestFailKeepsPreviousResult(t *testing.T) {
 func TestClaimPrefersNewUploads(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	for i := 0; i < 20; i++ {
 		m, _ := s.AddMatch(ctx, sess.ID, fmt.Sprintf("old-%d", i), "old.dem")
 		s.SaveMatchResult(ctx, m.ID, MatchResult{Rounds: 1}, 1)
@@ -187,9 +187,9 @@ func TestClaimPrefersNewUploads(t *testing.T) {
 func TestSessionsListSummary(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	full, _ := s.CreateSession(ctx, "2026-10-08", "")
-	mixed, _ := s.CreateSession(ctx, "2026-10-07", "")
-	empty, _ := s.CreateSession(ctx, "2026-10-06", "")
+	full, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	mixed, _ := s.CreateSession(ctx, 1, "2026-10-07", "")
+	empty, _ := s.CreateSession(ctx, 1, "2026-10-06", "")
 
 	done := func(sessionID int64, sha, mapName string) {
 		t.Helper()
@@ -209,7 +209,7 @@ func TestSessionsListSummary(t *testing.T) {
 	s.FailMatch(ctx, failed.ID, "ошибка", 1)
 	s.AddMatch(ctx, mixed.ID, "x3", "m.dem") // ещё в очереди
 
-	list, err := s.ListSessions(ctx)
+	list, err := s.ListSessions(ctx, 1)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -163,7 +163,7 @@ func (s *Store) extRows(ctx context.Context, where string, args ...any) ([]ExtRo
 
 // PlayerExtRows — строки игрока по матчам периода f (даты или сессии).
 func (s *Store) PlayerExtRows(ctx context.Context, steamID uint64, f MatchFilter) ([]ExtRow, error) {
-	where, args := MatchFilter{From: f.From, To: f.To, SessionIDs: f.SessionIDs}.where("m", "s")
+	where, args := f.period().where("m", "s")
 	return s.extRows(ctx, "mp.steam_id = ? AND "+where, append([]any{int64(steamID)}, args...)...)
 }
 
@@ -206,7 +206,7 @@ func (s *Store) clutchCounts(ctx context.Context, where string, args ...any) ([]
 
 // PlayerClutches — попытки клатча игрока за период.
 func (s *Store) PlayerClutches(ctx context.Context, steamID uint64, f MatchFilter) ([]ClutchCount, error) {
-	where, args := MatchFilter{From: f.From, To: f.To, SessionIDs: f.SessionIDs}.where("m", "s")
+	where, args := f.period().where("m", "s")
 	return s.clutchCounts(ctx, "c.steam_id = ? AND "+where, append([]any{int64(steamID)}, args...)...)
 }
 
@@ -256,7 +256,7 @@ func (s *Store) weaponTotals(ctx context.Context, where string, args ...any) ([]
 
 // PlayerWeapons — оружие игрока за период.
 func (s *Store) PlayerWeapons(ctx context.Context, steamID uint64, f MatchFilter) ([]WeaponTotal, error) {
-	where, args := MatchFilter{From: f.From, To: f.To, SessionIDs: f.SessionIDs}.where("m", "s")
+	where, args := f.period().where("m", "s")
 	return s.weaponTotals(ctx, "w.steam_id = ? AND "+where, append([]any{int64(steamID)}, args...)...)
 }
 

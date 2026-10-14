@@ -11,7 +11,7 @@ import (
 func TestSessionPlayers(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	const alice = 76561198000000001
 
 	addDone := func(sha string, rounds int, p stats.PlayerStats) {
@@ -69,7 +69,7 @@ func TestSessionPlayers(t *testing.T) {
 func TestSessionPlayersDuringReprocessing(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
 	p := stats.PlayerStats{SteamID: 1, Name: "a", Team: "A", Result: stats.Win, Counters: stats.Counters{Rounds: 10, Kills: 7}}
 	m, _ := s.AddMatch(ctx, sess.ID, "m", "m.dem")
 	s.SaveMatchResult(ctx, m.ID, MatchResult{Rounds: 10, Players: []stats.PlayerStats{p}}, 1)

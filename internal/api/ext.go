@@ -142,27 +142,13 @@ func newExtHeader(rows []store.ExtRow) extHeader {
 
 // playerExtRows разбирает запрос вкладки профиля. ok=false — ответ уже записан.
 func (s *Server) playerExtRows(w http.ResponseWriter, r *http.Request) (steamID uint64, f store.MatchFilter, rows []store.ExtRow, ok bool) {
-	steamID, err := strconv.ParseUint(r.PathValue("steamId"), 10, 64)
-	if err != nil || steamID == 0 {
-		writeError(w, http.StatusBadRequest, "некорректный SteamID")
+	if steamID, f, _, ok = s.playerRequest(w, r); !ok {
 		return
 	}
-	if f, err = parsePeriod(r.URL.Query()); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	all, err := s.Store.PlayerTotals(r.Context(), store.MatchFilter{PlayerIDs: []uint64{steamID}}, 1)
+	rows, err := s.Store.PlayerExtRows(r.Context(), steamID, f)
 	if err != nil {
 		s.internalError(w, err)
-		return
-	}
-	if len(all) == 0 {
-		writeError(w, http.StatusNotFound, "игрок не найден")
-		return
-	}
-	if rows, err = s.Store.PlayerExtRows(r.Context(), steamID, f); err != nil {
-		s.internalError(w, err)
-		return
+		return 0, f, nil, false
 	}
 	return steamID, f, rows, true
 }

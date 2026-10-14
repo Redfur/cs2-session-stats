@@ -12,7 +12,7 @@ import (
 func TestReparse(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
-	sess, _ := e.store.CreateSession(ctx, "2026-10-08", "")
+	sess, _ := e.store.CreateSession(ctx, 1, "2026-10-08", "")
 	done, _ := e.store.AddMatch(ctx, sess.ID, "a", "a.dem")
 	queued, _ := e.store.AddMatch(ctx, sess.ID, "b", "b.dem") // остаётся pending
 	e.store.ClaimNextPending(ctx)

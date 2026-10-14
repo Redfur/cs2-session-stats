@@ -29,10 +29,10 @@ func TestMigrationsIdempotent(t *testing.T) {
 		if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 			t.Fatal(err)
 		}
-		if version != 6 {
-			t.Fatalf("user_version = %d, ожидалось 6", version)
+		if version != 7 {
+			t.Fatalf("user_version = %d, ожидалось 7", version)
 		}
-		for _, table := range []string{"sessions", "matches", "match_players", "match_duels", "imports",
+		for _, table := range []string{"groups", "sessions", "matches", "match_players", "match_duels", "imports",
 			"match_player_ext", "match_player_weapons", "match_rounds", "match_kills", "match_clutches"} {
 			var n int
 			if err := s.db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&n); err != nil || n != 1 {
@@ -187,5 +187,50 @@ func TestMigration005Backfill(t *testing.T) {
 	rows, err := s.PlayerExtRows(t.Context(), 7, MatchFilter{})
 	if err != nil || len(rows) != 1 || rows[0].Covered || rows[0].Kills != 10 || rows[0].Assists != 3 {
 		t.Fatalf("строка старого матча: %+v, %v", rows, err)
+	}
+}
+
+// БД версии 6 схемы мигрирует: все сессии переходят в группу 1 «Основная».
+func TestMigration007Backfill(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	raw, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"001_init.sql", "002_reprocessing.sql", "003_duels.sql", "004_imports.sql",
+		"005_extended.sql", "006_round_swing.sql"} {
+		body, _ := migrationsFS.ReadFile("migrations/" + name)
+		if _, err := raw.Exec(string(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw.Exec("PRAGMA user_version = 6")
+	raw.Exec("INSERT INTO sessions (id, date, created_at) VALUES (1, '2026-10-01', 'x'), (2, '2026-10-08', 'x')")
+	raw.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var withoutGroup int
+	if err := s.db.QueryRow("SELECT count(*) FROM sessions WHERE group_id IS NOT 1").Scan(&withoutGroup); err != nil {
+		t.Fatal(err)
+	}
+	if withoutGroup != 0 {
+		t.Errorf("сессий не в группе 1: %d", withoutGroup)
+	}
+	groups, err := s.ListGroups(t.Context())
+	if err != nil || len(groups) != 1 || groups[0].ID != 1 || groups[0].Name != "Основная" || groups[0].SessionCount != 2 {
+		t.Fatalf("группы после миграции: %+v, %v", groups, err)
+	}
+}
+
+// На пустой базе есть группа «Основная» без сессий.
+func TestMigration007Empty(t *testing.T) {
+	s := openTest(t)
+	groups, err := s.ListGroups(t.Context())
+	if err != nil || len(groups) != 1 || groups[0].Name != "Основная" || groups[0].SessionCount != 0 {
+		t.Fatalf("группы новой базы: %+v, %v", groups, err)
 	}
 }

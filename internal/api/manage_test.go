@@ -15,7 +15,7 @@ import (
 func TestUpdateSession(t *testing.T) {
 	e := newTestEnv(t)
 	var sess store.Session
-	e.do(t, "POST", "/api/sessions", "application/json", []byte(`{"date":"2026-10-08","title":"Четверг"}`), &sess)
+	e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{"date":"2026-10-08","title":"Четверг"}`), &sess)
 	path := "/api/sessions/" + strconv.FormatInt(sess.ID, 10)
 
 	var got store.Session
@@ -52,7 +52,7 @@ func TestUpdateSession(t *testing.T) {
 func TestDeleteMatchAndSession(t *testing.T) {
 	e := newTestEnv(t)
 	var sess store.Session
-	e.do(t, "POST", "/api/sessions", "application/json", []byte(`{}`), &sess)
+	e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{}`), &sess)
 	sid := strconv.FormatInt(sess.ID, 10)
 
 	demos := map[string][]byte{"a.dem": []byte("HL2DEMO a"), "b.dem": []byte("HL2DEMO b"), "c.dem": []byte("HL2DEMO c")}
@@ -117,7 +117,7 @@ func TestDeleteMatchAndSession(t *testing.T) {
 
 	// демка удалённой сессии загружается в другую как новая
 	var other store.Session
-	e.do(t, "POST", "/api/sessions", "application/json", []byte(`{}`), &other)
+	e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{}`), &other)
 	sid = strconv.FormatInt(other.ID, 10)
 	if again := upload("a.dem"); again.Status != ingest.Accepted {
 		t.Fatalf("повторная загрузка после удаления сессии: %+v", again)
@@ -127,8 +127,8 @@ func TestDeleteMatchAndSession(t *testing.T) {
 func TestReorderMatches(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := t.Context()
-	sess, _ := e.store.CreateSession(ctx, "2026-10-08", "")
-	other, _ := e.store.CreateSession(ctx, "2026-10-09", "")
+	sess, _ := e.store.CreateSession(ctx, 1, "2026-10-08", "")
+	other, _ := e.store.CreateSession(ctx, 1, "2026-10-09", "")
 	var ids []string
 	for _, sha := range []string{"A", "B", "C"} {
 		m, _ := e.store.AddMatch(ctx, sess.ID, sha, sha+".dem")
@@ -168,7 +168,7 @@ func TestReorderMatches(t *testing.T) {
 func TestDeleteMatchFileError(t *testing.T) {
 	e := newTestEnv(t)
 	var sess store.Session
-	e.do(t, "POST", "/api/sessions", "application/json", []byte(`{}`), &sess)
+	e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{}`), &sess)
 	ct, body := multipartBody(t, map[string][]byte{"a.dem": []byte("HL2DEMO a")})
 	var res []ingest.FileResult
 	e.do(t, "POST", "/api/sessions/"+strconv.FormatInt(sess.ID, 10)+"/demos", ct, body, &res)

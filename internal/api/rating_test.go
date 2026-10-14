@@ -61,8 +61,8 @@ func byID(players []PlayerView, id uint64) PlayerView {
 func TestRatingInViews(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
-	early, _ := e.store.CreateSession(ctx, "2026-09-01", "")
-	late, _ := e.store.CreateSession(ctx, "2026-10-01", "")
+	early, _ := e.store.CreateSession(ctx, 1, "2026-09-01", "")
+	late, _ := e.store.CreateSession(ctx, 1, "2026-10-01", "")
 	addRatedMatch(t, e, early, ratingPlayer{steamA, "A", 1.40}, ratingPlayer{steamB, "B", 0.80})
 	m := addRatedMatch(t, e, late, ratingPlayer{steamA, "A", 1.00}, ratingPlayer{steamB, "B", 1.00})
 
@@ -76,7 +76,7 @@ func TestRatingInViews(t *testing.T) {
 	var sess sessionResponse
 	e.do(t, http.MethodGet, fmt.Sprintf("/api/sessions/%d", late.ID), "", nil, &sess)
 	var prof profileResponse
-	e.do(t, http.MethodGet, fmt.Sprintf("/api/players/%d", steamA), "", nil, &prof)
+	e.do(t, http.MethodGet, fmt.Sprintf("/api/groups/1/players/%d", steamA), "", nil, &prof)
 	if byID(sess.Players, steamA).Score == nil || prof.Sessions[0].Score == nil || prof.Matches[0].Score == nil {
 		t.Fatal("оценка должна быть в итогах сессии и разбивках профиля по сессиям и матчам")
 	}
@@ -86,8 +86,8 @@ func TestRatingInViews(t *testing.T) {
 
 	// OVR не зависит от периода таблицы игроков
 	var all, period playersResponse
-	e.do(t, http.MethodGet, "/api/players", "", nil, &all)
-	e.do(t, http.MethodGet, "/api/players?from=2026-10-01", "", nil, &period)
+	e.do(t, http.MethodGet, "/api/groups/1/players", "", nil, &all)
+	e.do(t, http.MethodGet, "/api/groups/1/players?from=2026-10-01", "", nil, &period)
 	pa, pp := byID(all.Players, steamA), byID(period.Players, steamA)
 	if pa.OVR == nil || pp.OVR == nil || *pa.OVR != *pp.OVR || pa.OVR.Matches != 2 || !pa.OVR.Calibrating || pa.OVR.CalibrationMatches != 10 {
 		t.Fatalf("OVR за всё время %+v, за период %+v", pa.OVR, pp.OVR)
@@ -97,7 +97,7 @@ func TestRatingInViews(t *testing.T) {
 	}
 	// пустой период профиля: нулевые итоги без оценки, OVR остаётся
 	var empty profileResponse
-	e.do(t, http.MethodGet, fmt.Sprintf("/api/players/%d?from=2027-01-01", steamA), "", nil, &empty)
+	e.do(t, http.MethodGet, fmt.Sprintf("/api/groups/1/players/%d?from=2027-01-01", steamA), "", nil, &empty)
 	if empty.Totals.Score != nil || empty.OVR == nil || *empty.OVR != *pa.OVR {
 		t.Errorf("пустой период: оценка %v, OVR %+v", empty.Totals.Score, empty.OVR)
 	}
@@ -106,13 +106,13 @@ func TestRatingInViews(t *testing.T) {
 func TestProfileRating(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
-	first, _ := e.store.CreateSession(ctx, "2026-09-01", "")
-	second, _ := e.store.CreateSession(ctx, "2026-10-01", "")
+	first, _ := e.store.CreateSession(ctx, 1, "2026-09-01", "")
+	second, _ := e.store.CreateSession(ctx, 1, "2026-10-01", "")
 	for i := 0; i < 5; i++ {
 		addRatedMatch(t, e, first, ratingPlayer{steamA, "A", 0.60})
 	}
 	var prof profileResponse
-	e.do(t, http.MethodGet, fmt.Sprintf("/api/players/%d", steamA), "", nil, &prof)
+	e.do(t, http.MethodGet, fmt.Sprintf("/api/groups/1/players/%d", steamA), "", nil, &prof)
 	ls := prof.LastSession
 	if ls == nil || ls.SessionID != first.ID || ls.Before != nil || ls.Delta != nil || ls.VsUsual != nil || !ls.Calibrating || ls.Matches != 5 {
 		t.Fatalf("первая сессия: %+v", ls)
@@ -121,7 +121,7 @@ func TestProfileRating(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		addRatedMatch(t, e, second, ratingPlayer{steamA, "A", 1.20})
 	}
-	e.do(t, http.MethodGet, fmt.Sprintf("/api/players/%d", steamA), "", nil, &prof)
+	e.do(t, http.MethodGet, fmt.Sprintf("/api/groups/1/players/%d", steamA), "", nil, &prof)
 	if prof.Last20 == nil || *prof.Last20 != stats.ScorePoints(ratingCounters(1.20).Rating()) {
 		t.Errorf("среднее за 20 = %v, ожидалась оценка последних 20 матчей", prof.Last20)
 	}
@@ -140,8 +140,8 @@ func TestProfileRating(t *testing.T) {
 func TestSessionChange(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
-	first, _ := e.store.CreateSession(ctx, "2026-09-01", "")
-	second, _ := e.store.CreateSession(ctx, "2026-10-01", "")
+	first, _ := e.store.CreateSession(ctx, 1, "2026-09-01", "")
+	second, _ := e.store.CreateSession(ctx, 1, "2026-10-01", "")
 	addRatedMatch(t, e, first, ratingPlayer{steamA, "A", 1.00})
 	low := addRatedMatch(t, e, second, ratingPlayer{steamA, "A", 0.70}, ratingPlayer{steamB, "B", 1.00})
 	high := addRatedMatch(t, e, second, ratingPlayer{steamA, "A", 1.60})
@@ -179,7 +179,7 @@ func TestSessionChange(t *testing.T) {
 func TestMatchTeamsOVR(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
-	sess, _ := e.store.CreateSession(ctx, "2026-10-01", "")
+	sess, _ := e.store.CreateSession(ctx, 1, "2026-10-01", "")
 	ids := []uint64{steamA, steamB, 3, 4, 5, 6, 7, 8, 9, 10}
 	var ps []ratingPlayer
 	for i, id := range ids {
@@ -228,7 +228,7 @@ func TestMatchTeamsOVR(t *testing.T) {
 func TestScoreFollowsRoundSwing(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
-	sess, _ := e.store.CreateSession(ctx, "2026-10-01", "")
+	sess, _ := e.store.CreateSession(ctx, 1, "2026-10-01", "")
 	m, _ := e.store.AddMatch(ctx, sess.ID, "swing", "m.dem")
 	c := stats.Counters{Rounds: 2, Kills: 1, Deaths: 1, KASTRounds: 1, Damage: 150}
 	ids := []uint64{steamA, steamB, 3, 4, 5, 6, 7, 8, 9, 10}
