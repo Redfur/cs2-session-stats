@@ -49,6 +49,7 @@ cmd/cs2stats       main: serve (по умолчанию), parse FILE, reparse
 internal/config    env: DATA_DIR (./data), ADDR (:8080), MAX_DEMO_SIZE (1 ГБ), STATIC_DIR
 internal/parser    демка → доменная модель Match/Round/Kill/Damage (demoinfocs-golang/v5); без зависимостей от demoinfocs снаружи
 internal/stats     Compute(parser.Match) → []PlayerStats; Counters и производные показатели
+internal/rating    OVR игроков: Build(матчи в порядке игры) → Book (EMA Rating 2.0, калибровка, до/после сессии)
 internal/ingest    приём файла: формат, распаковка gz/bz2/zst/zip, лимит, sha256, дедуп; Storage (LocalStorage)
 internal/importer  импорт по ссылке: Platform (FastCup, Cybershoke), проверка ссылок (Add), фоновое скачивание (Run), архивы серий
 internal/worker    очередь матчей; ProcessingVersion; пересчёт устаревших при старте
@@ -58,7 +59,8 @@ internal/webui     раздача SPA: embed при -tags embedweb, иначе �
 web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI + lucide-react; страницы /, /sessions/:id, /matches/:id, /players, /players/:id[/fight|weapons|utility]
   src/index.css      токены дизайна (@theme), шрифты Manrope и JetBrains Mono самохостом (@fontsource-variable)
   src/components/ui  компоненты дизайн-системы: каркас, кнопки, поля, бейджи, StatTable, диалоги, загрузка
-  src/metrics.ts     шкала «плохо / средне / хорошо» для rating, K/D, ADR, KAST
+  src/metrics.ts     шкала «плохо / средне / хорошо» для rating, K/D, ADR, KAST; ступени оценки 0–100
+  src/components/ui/Rating.tsx  оценка и OVR: ScoreBadge, VsUsual, OvrChange, TeamOvr; src/media.ts — useNarrow
   src/duels.ts       доля и ступень пары для матрицы дуэлей; блоки дуэлей — src/components/Duels.tsx
   src/ext.ts         загрузка и тексты покрытия расширенной статистики; src/rounds.ts — раунды матча; src/weapons.ts — названия и иконки оружия (src/assets/weapons)
   src/sort.ts        сортировка таблиц в адресе (useSort); src/upload.ts — очередь загрузки демок

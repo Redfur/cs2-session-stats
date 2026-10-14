@@ -11,6 +11,7 @@ import { MatchesTable } from '../components/MatchesTable'
 import { SessionDuelsCard } from '../components/Duels'
 import { PageError, PageLoading } from '../components/PageState'
 import { PLAYER_TOTAL_COLUMNS, PLAYER_TOTAL_MIN_WIDTH, RATING_DESC } from '../components/playerColumns'
+import { SCORE_COLUMNS, SCORE_COLUMNS_NARROW, SCORE_MIN_WIDTH } from '../components/scoreColumns'
 import { Alert } from '../components/ui/Alert'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -23,6 +24,7 @@ import { Segment } from '../components/ui/Segment'
 import { SortHint, StatTable } from '../components/ui/StatTable'
 import { UploadList } from '../components/ui/UploadList'
 import { formatDateLong, plural } from '../format'
+import { useNarrow } from '../media'
 import { sortRows, useSort, type SortState } from '../sort'
 import { useUploadQueue } from '../upload'
 
@@ -40,7 +42,7 @@ const DETAIL_COLUMNS = detailColumns('session', {
   noFlash: 'В демках нет событий ослепления — не посчитано',
 })
 
-type TotalsView = 'basic' | 'detail'
+type TotalsView = 'basic' | 'detail' | 'scores'
 
 // «матч #5 обработан» / «матчи #4 и #5 обработаны»
 const oldMatches = (list: { ordinal: number }[]) =>
@@ -98,14 +100,17 @@ export function SessionPage() {
 
   const { sort, toggle } = useSort('sort', PLAYER_TOTAL_COLUMNS, RATING_DESC)
   const detailSort = useSort('sort', DETAIL_COLUMNS, RATING_DESC)
+  const scoreSort = useSort('sort', SCORE_COLUMNS, RATING_DESC)
+  const narrow = useNarrow()
   const [params, setParams] = useSearchParams()
-  const totalsView: TotalsView = params.get('totals') === 'detail' ? 'detail' : 'basic'
+  const rawView = params.get('totals')
+  const totalsView: TotalsView = rawView === 'detail' || rawView === 'scores' ? rawView : 'basic'
   const setTotalsView = (v: TotalsView) =>
     setParams(
       (prev) => {
         const p = new URLSearchParams(prev)
-        if (v === 'detail') p.set('totals', 'detail')
-        else p.delete('totals')
+        if (v === 'basic') p.delete('totals')
+        else p.set('totals', v)
         p.delete('sort') // у видов разные колонки
         return p
       },
@@ -311,6 +316,8 @@ export function SessionPage() {
                 <span className="hidden md:inline">
                   {totalsView === 'detail' ? (
                     <SortHint columns={DETAIL_COLUMNS} sort={detailSort.sort} prefix="" />
+                  ) : totalsView === 'scores' ? (
+                    <SortHint columns={SCORE_COLUMNS} sort={scoreSort.sort} prefix="" />
                   ) : (
                     <SortHint columns={PLAYER_TOTAL_COLUMNS} sort={sort} prefix="" />
                   )}
@@ -322,6 +329,7 @@ export function SessionPage() {
                   options={[
                     { value: 'basic', label: 'Основное' },
                     { value: 'detail', label: 'Подробно' },
+                    { value: 'scores', label: 'Оценки' },
                   ]}
                 />
               </div>
@@ -345,6 +353,22 @@ export function SessionPage() {
                 load()
               }}
             />
+          ) : totalsView === 'scores' ? (
+            <>
+              <StatTable
+                columns={narrow ? SCORE_COLUMNS_NARROW : SCORE_COLUMNS}
+                rows={sortRows(players, SCORE_COLUMNS, scoreSort.sort)}
+                rowKey={(p) => p.steamId}
+                sort={scoreSort.sort}
+                onSort={scoreSort.toggle}
+                labelledBy="totals-h"
+                minWidth={narrow ? 0 : SCORE_MIN_WIDTH}
+              />
+              <CardFooter className="text-small text-fg-muted">
+                Лучший игрок сессии — по Rating. «К обычному» — оценка за вечер минус OVR перед ним. OVR за вечер — до и после
+                вечера. Пунктир — калибровка.
+              </CardFooter>
+            </>
           ) : (
             <StatTable
               columns={PLAYER_TOTAL_COLUMNS}

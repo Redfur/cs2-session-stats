@@ -85,6 +85,8 @@ export interface OVR {
   rating: number
   matches: number
   calibrating: boolean
+  // порог калибровки — для счётчика «5/10»
+  calibrationMatches: number
 }
 
 // SessionChange — OVR до и после сессии; разницы посчитаны по округлённым баллам.
@@ -100,6 +102,7 @@ export interface SessionChange {
   // матчей игрока после сессии
   matches: number
   calibrating: boolean
+  calibrationMatches: number
 }
 
 // TeamOVR — средний OVR команды перед матчем «по rated из total» игроков.

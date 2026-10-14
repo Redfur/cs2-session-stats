@@ -3,10 +3,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { api, type PlayerRow } from '../api'
 import { PeriodSide } from '../components/PeriodFilter'
-import { PLAYER_TOTAL_COLUMNS, PLAYER_TOTAL_MIN_WIDTH, RATING_DESC } from '../components/playerColumns'
+import { PLAYERS_PAGE_COLUMNS, PLAYERS_PAGE_MIN_WIDTH, RATING_DESC } from '../components/playerColumns'
 import { Alert } from '../components/ui/Alert'
 import { Button, ButtonLink } from '../components/ui/Button'
-import { Card, CardBody, CardHeader } from '../components/ui/Card'
+import { Card, CardBody, CardFooter, CardHeader } from '../components/ui/Card'
 import { Checkbox } from '../components/ui/Checkbox'
 import { EmptyState } from '../components/ui/EmptyState'
 import { Input, Label } from '../components/ui/Field'
@@ -27,7 +27,7 @@ export function PlayersPage() {
   const [error, setError] = useState('')
   const sessions = useSessionList()
   const period = usePeriod(params, setParams)
-  const { sort, toggle } = useSort('sort', PLAYER_TOTAL_COLUMNS, RATING_DESC)
+  const { sort, toggle } = useSort('sort', PLAYERS_PAGE_COLUMNS, RATING_DESC)
 
   const minMatches = params.get('minMatches') ?? DEFAULT_MIN_MATCHES
   const selected = new Set(params.getAll('player'))
@@ -84,7 +84,7 @@ export function PlayersPage() {
 
   const totalMatches = sessions.reduce((n, s) => n + s.matchCount, 0)
   const sessionsWithMatches = sessions.filter((s) => s.matchCount > 0).length
-  const rows = players ? sortRows(players, PLAYER_TOTAL_COLUMNS, sort) : []
+  const rows = players ? sortRows(players, PLAYERS_PAGE_COLUMNS, sort) : []
   const min = Number(minMatches) || 1
 
   return (
@@ -186,19 +186,25 @@ export function PlayersPage() {
                   title="Сводная таблица"
                   titleId="players-h"
                   note={`${plural(rows.length, ['игрок', 'игрока', 'игроков'])} · ${periodText(period)} · от ${min} ${min === 1 ? 'матча' : 'матчей'}`}
-                  aside={<SortHint columns={PLAYER_TOTAL_COLUMNS} sort={sort} />}
+                  aside={<SortHint columns={PLAYERS_PAGE_COLUMNS} sort={sort} />}
                 />
                 {rows.length > 0 ? (
-                  <StatTable
-                    columns={PLAYER_TOTAL_COLUMNS}
-                    rows={rows}
-                    rowKey={(p) => p.steamId}
-                    sort={sort}
-                    onSort={toggle}
-                    highlight={(p) => selected.has(p.steamId)}
-                    labelledBy="players-h"
-                    minWidth={PLAYER_TOTAL_MIN_WIDTH}
-                  />
+                  <>
+                    <StatTable
+                      columns={PLAYERS_PAGE_COLUMNS}
+                      rows={rows}
+                      rowKey={(p) => p.steamId}
+                      sort={sort}
+                      onSort={toggle}
+                      highlight={(p) => selected.has(p.steamId)}
+                      labelledBy="players-h"
+                      minWidth={PLAYERS_PAGE_MIN_WIDTH}
+                    />
+                    <CardFooter className="text-small text-fg-muted">
+                      OVR — общий уровень по всем матчам игрока, от периода не зависит; Rating — за выбранный период.
+                      Пунктирная рамка и «5/10» — калибровка: меньше {rows[0].ovr?.calibrationMatches ?? 10} матчей.
+                    </CardFooter>
+                  </>
                 ) : options.length === 0 ? (
                   <EmptyState
                     icon={<Inbox />}

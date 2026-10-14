@@ -84,7 +84,7 @@ func TestRatingInViews(t *testing.T) {
 	e.do(t, http.MethodGet, "/api/players", "", nil, &all)
 	e.do(t, http.MethodGet, "/api/players?from=2026-10-01", "", nil, &period)
 	pa, pp := byID(all.Players, steamA), byID(period.Players, steamA)
-	if pa.OVR == nil || pp.OVR == nil || *pa.OVR != *pp.OVR || pa.OVR.Matches != 2 || !pa.OVR.Calibrating {
+	if pa.OVR == nil || pp.OVR == nil || *pa.OVR != *pp.OVR || pa.OVR.Matches != 2 || !pa.OVR.Calibrating || pa.OVR.CalibrationMatches != 10 {
 		t.Fatalf("OVR за всё время %+v, за период %+v", pa.OVR, pp.OVR)
 	}
 	if pp.Matches != 1 {

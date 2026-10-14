@@ -1,14 +1,16 @@
-import { ExternalLink } from 'lucide-react'
+import { ArrowRight, ExternalLink, Hourglass } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { api, sessionTitle, type PlayerProfile, type ProfileMap, type ProfileMatch, type ProfileSession } from '../api'
+import { api, sessionTitle, type PlayerProfile, type SessionSummary, type ProfileMap, type ProfileMatch, type ProfileSession } from '../api'
 import { RivalsCard } from '../components/Duels'
 import { FightTab, UtilityTab, WeaponsTab } from '../components/PlayerExtTabs'
 import { PageError, PageLoading } from '../components/PageState'
 import { PeriodBar } from '../components/PeriodFilter'
 import { PLAYER_TOTAL_COLUMNS, PLAYER_TOTAL_MIN_WIDTH, RATING_DESC } from '../components/playerColumns'
 import { Alert } from '../components/ui/Alert'
-import { OutcomeBadge } from '../components/ui/Badge'
+import { Badge, OutcomeBadge } from '../components/ui/Badge'
+import { CoverageChip } from '../components/ui/ExtValue'
+import { CalibrationTag, Delta, OvrTooltip, RatingTile, ScoreBadge, ScoreWithUsual } from '../components/ui/Rating'
 import { Card, CardBody, CardHeader } from '../components/ui/Card'
 import { Page } from '../components/ui/Layout'
 import { MetaItem, PageHeader } from '../components/ui/PageHeader'
@@ -17,7 +19,7 @@ import { Tabs } from '../components/ui/Tabs'
 import { rowLinkClass, StatTable, type Column } from '../components/ui/StatTable'
 import { StatTile } from '../components/ui/StatTile'
 import { formatDateLong, formatDateShort, plural } from '../format'
-import { formatMetric, formatPct } from '../metrics'
+import { formatMetric, formatPct, scoreTierName } from '../metrics'
 import { usePeriod, useSessionList } from '../period'
 import { sortRows, useSort, type SortState } from '../sort'
 import { NotFoundPage } from './NotFoundPage'
@@ -53,6 +55,22 @@ const SESSION_COLUMNS: Column<ProfileSession>[] = [
   { key: 'kd', label: 'K/D', numeric: true, metric: 'kd', width: 60, value: (s) => s.kd },
   { key: 'adr', label: 'ADR', numeric: true, metric: 'adr', width: 66, value: (s) => s.adr },
   { key: 'kast', label: 'KAST', numeric: true, metric: 'kast', width: 60, value: (s) => s.kastPct },
+  {
+    key: 'score',
+    label: 'Оценка',
+    title: 'Оценка за сессию, 0–100. Иконка — лучше или хуже обычного',
+    numeric: true,
+    width: 88,
+    value: (s) => s.score ?? -1,
+    render: (s) => (
+      <ScoreWithUsual
+        score={s.score}
+        delta={s.change?.vsUsual}
+        usual={s.change?.before}
+        missing="Первая сессия игрока — сравнивать не с чем"
+      />
+    ),
+  },
   { key: 'rating', label: 'Rating', numeric: true, metric: 'rating', strong: true, width: 70, value: (s) => s.rating },
 ]
 const SESSIONS_DEFAULT: SortState = { key: 'date', dir: 'desc' }
@@ -136,6 +154,17 @@ const MATCH_COLUMNS: Column<ProfileMatch>[] = [
     render: (m) => `${m.kills}-${m.deaths}-${m.assists}`,
   },
   { key: 'adr', label: 'ADR', numeric: true, metric: 'adr', width: 72, value: (m) => m.adr },
+  {
+    key: 'score',
+    label: 'Оценка',
+    title: 'Оценка за матч, 0–100. Иконка — лучше или хуже обычного',
+    numeric: true,
+    width: 88,
+    value: (m) => m.score ?? -1,
+    render: (m) => (
+      <ScoreWithUsual score={m.score} delta={m.vsUsual} usual={m.before} missing="Первый матч игрока — сравнивать не с чем" />
+    ),
+  },
   { key: 'rating', label: 'Rating', numeric: true, metric: 'rating', strong: true, width: 76, value: (m) => m.rating },
 ]
 const MATCHES_DEFAULT: SortState = { key: 'n', dir: 'desc' }
@@ -214,6 +243,8 @@ export function PlayerPage() {
         </Alert>
       )}
 
+      <RatingTiles data={data} sessions={sessions} />
+
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-6 md:gap-4">
         <StatTile label="Rating" value={formatMetric('rating', t.rating)} sub="HLTV 2.0" metric={{ metric: 'rating', value: t.rating }} />
         <StatTile label="ADR" value={formatMetric('adr', t.adr)} sub="урон за раунд" metric={{ metric: 'adr', value: t.adr }} />
@@ -246,6 +277,78 @@ export function PlayerPage() {
       {tab === 'utility' && <UtilityTab steamId={steamId} query={query} sessions={sessions} />}
       {tab === undefined && <Overview data={data} steamId={steamId} query={query} ss={ss} sm={sm} sx={sx} />}
     </Page>
+  )
+}
+
+// RatingTiles — OVR, «Среднее за 20» и последняя сессия над ключевыми показателями.
+// От периода профиля не зависят.
+function RatingTiles({ data, sessions }: { data: PlayerProfile; sessions: SessionSummary[] }) {
+  const { ovr, last20, lastSession: ls } = data
+  if (!ovr) return null
+  const lastSess = ls && sessions.find((s) => s.id === ls.sessionId)
+  return (
+    <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-4">
+      <RatingTile label="OVR" className="col-span-2 md:col-span-1" sub="по всем матчам игрока, последние весят больше">
+        <ScoreBadge
+          score={ovr.score}
+          size="xl"
+          calibrating={ovr.calibrating}
+          title={
+            ovr.calibrating
+              ? `Калибровка: ${ovr.matches} из ${ovr.calibrationMatches} матчей, OVR пока ненадёжен`
+              : `OVR ${ovr.score} — ${scoreTierName(ovr.score)}`
+          }
+        />
+        {ovr.calibrating ? (
+          <span title={`OVR станет надёжным после ${ovr.calibrationMatches} матчей`}>
+            <Badge tone="neutral" icon={<Hourglass aria-hidden />}>
+              Калибровка · {ovr.matches} из {plural(ovr.calibrationMatches, ['матча', 'матчей', 'матчей'])}
+            </Badge>
+          </span>
+        ) : (
+          <span className="text-small text-fg-muted">{scoreTierName(ovr.score)}</span>
+        )}
+      </RatingTile>
+      <RatingTile label="Среднее за 20" sub="оценка по последним 20 матчам">
+        {last20 !== undefined && <ScoreBadge score={last20} size="lg" />}
+        {ovr.matches < 20 && (
+          <CoverageChip title="Сыграно меньше 20 матчей — среднее по всем">по {ovr.matches} из 20</CoverageChip>
+        )}
+      </RatingTile>
+      <RatingTile
+        label="Последняя сессия"
+        sub={
+          lastSess && (
+            <>
+              <Link to={`/sessions/${lastSess.id}`} className="focus-ring">
+                {sessionTitle(lastSess)}
+              </Link>
+              {lastSess.title && ` · ${formatDateLong(lastSess.date)}`}
+            </>
+          )
+        }
+      >
+        {ls && (ls.before === undefined || ls.delta === undefined ? (
+          <CalibrationTag />
+        ) : (
+          <OvrTooltip
+            before={ls.before}
+            after={ls.after}
+            delta={ls.delta}
+            score={ls.score}
+            align="right"
+            trigger={
+              <span className="inline-flex items-center gap-2.5 text-[18px] leading-6 font-extrabold tabular-nums md:text-[22px] md:leading-7">
+                <span className="font-semibold text-fg-muted">{ls.before}</span>
+                <ArrowRight className="size-[18px] text-fg-faint" aria-label="→" />
+                <span>{ls.after}</span>
+                <Delta value={ls.delta} className="h-6 text-[13px]" />
+              </span>
+            }
+          />
+        ))}
+      </RatingTile>
+    </div>
   )
 }
 
@@ -283,7 +386,7 @@ function Overview({ data, steamId, query, ss, sm, sx }: OverviewProps) {
           rows={data.sessions}
           rowKey={(s) => s.session.id}
           sort={ss}
-          minWidth={580}
+          minWidth={668}
         />
         <Breakdown id="pm-h" title="По картам" columns={MAP_COLUMNS} rows={data.maps} rowKey={(m) => m.map} sort={sm} minWidth={380} />
       </div>
@@ -297,7 +400,7 @@ function Overview({ data, steamId, query, ss, sm, sx }: OverviewProps) {
         rows={data.matches}
         rowKey={(m) => m.matchId}
         sort={sx}
-        minWidth={780}
+        minWidth={868}
         aside={<span className="text-small text-fg-muted">Счёт — со стороны игрока: его команда слева</span>}
       />
     </>

@@ -15,10 +15,12 @@ interface ScoreBoardProps {
   footer?: ReactNode
   // содержимое карточки под счётом: полоса раундов
   children?: ReactNode
+  // рядом с названием команды, со стороны счёта: средний OVR команды
+  teamExtra?: { A?: ReactNode; B?: ReactNode }
 }
 
 // ScoreBoard — крупный счёт матча. Победившая сторона отмечена бейджем «Победа», а не только цветом.
-export function ScoreBoard({ scoreA, scoreB, duration, footer, children }: ScoreBoardProps) {
+export function ScoreBoard({ scoreA, scoreB, duration, footer, children, teamExtra }: ScoreBoardProps) {
   const label =
     `${scoreA} : ${scoreB}, ` +
     (scoreA === scoreB ? 'ничья' : `победа команды ${scoreA > scoreB ? 'A' : 'B'}`)
@@ -27,7 +29,10 @@ export function ScoreBoard({ scoreA, scoreB, duration, footer, children }: Score
       <div className="px-4 pt-6 md:px-8 md:pt-8">
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 md:gap-7">
           <div className="flex min-w-0 flex-col items-start gap-2.5">
-            <TeamName team="A" className="text-[14px] leading-6 md:text-[18px] [&>span:first-child]:md:size-3" />
+            <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
+              <TeamName team="A" className="text-[14px] leading-6 md:text-[18px] [&>span:first-child]:md:size-3" />
+              {teamExtra?.A}
+            </span>
             <OutcomeBadge result={outcome(scoreA, scoreB)} />
           </div>
           <div className="flex flex-col items-center gap-1.5">
@@ -42,7 +47,10 @@ export function ScoreBoard({ scoreA, scoreB, duration, footer, children }: Score
             )}
           </div>
           <div className="flex min-w-0 flex-col items-end gap-2.5">
-            <TeamName team="B" className="text-[14px] leading-6 md:text-[18px] [&>span:last-child]:md:size-3" />
+            <span className="inline-flex min-w-0 flex-wrap items-center justify-end gap-x-2.5 gap-y-1.5">
+              {teamExtra?.B}
+              <TeamName team="B" className="text-[14px] leading-6 md:text-[18px] [&>span:last-child]:md:size-3" />
+            </span>
             <OutcomeBadge result={outcome(scoreB, scoreA)} />
           </div>
         </div>

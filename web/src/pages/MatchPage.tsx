@@ -21,12 +21,17 @@ import { Page } from '../components/ui/Layout'
 import { MetaItem, PageHeader } from '../components/ui/PageHeader'
 import { TeamName } from '../components/ui/Score'
 import { ScoreBoard } from '../components/ui/ScoreBoard'
+import { TeamOvr } from '../components/ui/Rating'
 import { Segment } from '../components/ui/Segment'
 import { StatTable, type Column } from '../components/ui/StatTable'
 import { plural } from '../format'
 import { sortRows, useSort, type SortState } from '../sort'
 
 const POLL_MS = 3000
+
+// newcomers — игроки команды, у которых это первый матч: их нет в среднем OVR команды.
+const newcomers = (players: PlayerRow[], team: 'A' | 'B') =>
+  players.filter((p) => p.team === team && p.before === undefined).map((p) => p.name)
 
 const DETAIL_COLUMNS = detailColumns('match', {
   old: 'Матч обработан старой версией — пересчитайте его',
@@ -203,6 +208,10 @@ export function MatchPage() {
             scoreB={match.scoreB}
             duration={matchDuration(ext)}
             footer={ext ? undefined : `${plural(match.rounds, ['раунд', 'раунда', 'раундов'])} · Команда A начала матч за CT`}
+            teamExtra={{
+              A: <TeamOvr side="A" team={data.teams.A} newcomers={newcomers(players, 'A')} />,
+              B: <TeamOvr side="B" team={data.teams.B} newcomers={newcomers(players, 'B')} />,
+            }}
           >
             {ext && <MatchRounds ext={ext} players={players} />}
           </ScoreBoard>

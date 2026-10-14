@@ -33,10 +33,13 @@ type OVRView struct {
 	Rating      float64 `json:"rating"`
 	Matches     int     `json:"matches"`
 	Calibrating bool    `json:"calibrating"`
+	// порог калибровки — для счётчика «5/10»
+	CalibrationMatches int `json:"calibrationMatches"`
 }
 
 func ovrView(b *rating.Book, st rating.State) *OVRView {
-	return &OVRView{Score: st.Score(), Rating: round2(st.Rating), Matches: st.Matches, Calibrating: b.Calibrating(st.Matches)}
+	return &OVRView{Score: st.Score(), Rating: round2(st.Rating), Matches: st.Matches,
+		Calibrating: b.Calibrating(st.Matches), CalibrationMatches: b.CalibrationMatches()}
 }
 
 // playerOVR — текущий OVR игрока; nil, если матчей нет.
@@ -59,6 +62,8 @@ type SessionChangeView struct {
 	VsUsual     *int  `json:"vsUsual,omitempty"` // score − before
 	Matches     int   `json:"matches"`           // матчей игрока после сессии
 	Calibrating bool  `json:"calibrating"`       // OVR после сессии ещё в калибровке
+	// порог калибровки — для счётчика «8/10»
+	CalibrationMatches int `json:"calibrationMatches"`
 }
 
 func sessionChangeView(b *rating.Book, ch rating.SessionChange) *SessionChangeView {
@@ -68,6 +73,8 @@ func sessionChangeView(b *rating.Book, ch rating.SessionChange) *SessionChangeVi
 		After:       ch.After.Score(),
 		Matches:     ch.After.Matches,
 		Calibrating: b.Calibrating(ch.After.Matches),
+
+		CalibrationMatches: b.CalibrationMatches(),
 	}
 	if ch.HasBefore {
 		before := ch.Before.Score()

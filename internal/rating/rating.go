@@ -93,6 +93,9 @@ func Build(rows []MatchRow, p Params) *Book {
 	return b
 }
 
+// CalibrationMatches — порог калибровки.
+func (b *Book) CalibrationMatches() int { return b.params.Calibration }
+
 // Calibrating — меньше ли n матчей порога калибровки.
 func (b *Book) Calibrating(n int) bool { return n < b.params.Calibration }
 
