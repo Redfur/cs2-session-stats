@@ -1,7 +1,7 @@
 import { cx } from './cx'
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'danger-quiet' | 'delete'
-export type ButtonSize = 'md' | 'sm' | 'xs'
+export type ButtonSize = 'lg' | 'md' | 'sm' | 'xs'
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary: 'bg-primary text-primary-fg enabled:hover:bg-primary-hover hover:text-primary-fg',
@@ -16,6 +16,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
 }
 
 const SIZES: Record<ButtonSize, { text: string; icon: string }> = {
+  // крупная кнопка одиночных экранов («Создайте группу»)
+  lg: { text: 'h-11 px-5 gap-2 text-[15px] [&_svg]:size-4', icon: 'size-11 [&_svg]:size-4' },
   md: { text: 'h-9 px-3.5 gap-2 text-[14px] [&_svg]:size-4', icon: 'size-9 [&_svg]:size-4' },
   sm: { text: 'h-[30px] px-2.5 gap-1.5 text-[13px] [&_svg]:size-3.5', icon: 'size-[30px] [&_svg]:size-3.5' },
   xs: { text: 'h-[26px] px-2 gap-1 text-[12px] [&_svg]:size-3.5', icon: 'size-[26px] rounded-sm [&_svg]:size-3.5' },

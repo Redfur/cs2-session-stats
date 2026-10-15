@@ -1,4 +1,4 @@
-import { Pencil, Trash } from 'lucide-react'
+import { Pencil, Settings2, Trash } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { api, ApiError, type GroupSummary } from '../api'
@@ -8,6 +8,7 @@ import { PageError, PageLoading } from '../components/PageState'
 import { Button } from '../components/ui/Button'
 import { Card, CardHeader } from '../components/ui/Card'
 import { ConfirmDialog } from '../components/ui/Dialog'
+import { EmptyState } from '../components/ui/EmptyState'
 import { Page } from '../components/ui/Layout'
 import { PageHeader } from '../components/ui/PageHeader'
 import { plural } from '../format'
@@ -118,6 +119,16 @@ export function GroupPage() {
         }
         meta={<span className="tabular-nums">{groupMeta(data)}</span>}
       />
+
+      <Card aria-labelledby="st-h">
+        <CardHeader title="Настройки" titleId="st-h" />
+        <EmptyState
+          icon={<Settings2 />}
+          className="py-9"
+          title="Настройки скоро появятся"
+          text="Название группы меняется карандашом рядом с заголовком страницы."
+        />
+      </Card>
 
       <Card danger aria-labelledby="dz-h">
         <CardHeader title={<span className="text-metric-bad">Опасная зона</span>} titleId="dz-h" />

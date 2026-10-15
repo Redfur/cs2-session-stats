@@ -1,7 +1,7 @@
-import { RefreshCw, UsersRound } from 'lucide-react'
+import { RefreshCw, Users } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router'
-import { api } from '../api'
+import { api, ApiError } from '../api'
 import { MAX_GROUP_NAME } from '../components/NewGroupDialog'
 import { Alert } from '../components/ui/Alert'
 import { Button } from '../components/ui/Button'
@@ -48,7 +48,7 @@ function LoadingCard() {
         <span className={`${skel} h-3.5 w-[300px] max-w-full`} />
       </div>
       <span className={`${skel} h-9 w-full`} />
-      <span className={`${skel} h-9 w-full`} />
+      <span className={`${skel} h-11 w-full`} />
     </Solo>
   )
 }
@@ -59,7 +59,7 @@ function LoadError({ onRetry }: { onRetry: () => void }) {
       <Alert tone="error" title="Не удалось загрузить группы.">
         Сервер не ответил. Попробуйте ещё раз.
       </Alert>
-      <Button variant="secondary" className="w-full" leading={<RefreshCw aria-hidden />} onClick={onRetry}>
+      <Button variant="secondary" size="lg" className="w-full" leading={<RefreshCw aria-hidden />} onClick={onRetry}>
         Повторить
       </Button>
     </Solo>
@@ -87,7 +87,8 @@ function CreateGroupScreen() {
       navigate(paths.sessions(g.id))
       reload().catch(() => {})
     } catch (err) {
-      setError((err as Error).message)
+      // ответ сервера показываем как есть, обрыв соединения — словами макета
+      setError(err instanceof ApiError ? err.message : 'Сервер не ответил — попробуйте ещё раз.')
       setBusy(false)
     }
   }
@@ -97,7 +98,7 @@ function CreateGroupScreen() {
       <Solo>
         <div className="flex flex-col items-center gap-3 text-center">
           <span className="grid size-12 place-items-center rounded-lg bg-surface-2 text-fg-muted [&>svg]:size-[22px]" aria-hidden>
-            <UsersRound />
+            <Users />
           </span>
           <h1 className="m-0 text-[24px] leading-[30px] font-bold tracking-[-0.01em] md:text-page">Создайте группу</h1>
           <p className="m-0 max-w-[360px] text-fg-muted">
@@ -130,7 +131,7 @@ function CreateGroupScreen() {
             {error}
           </Alert>
         )}
-        <Button type="submit" variant="primary" className="w-full" loading={busy}>
+        <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy}>
           Создать группу
         </Button>
         <p className="m-0 text-center text-small text-fg-muted">Дальше: новая сессия → загрузка демок → игроки появятся из демок.</p>
