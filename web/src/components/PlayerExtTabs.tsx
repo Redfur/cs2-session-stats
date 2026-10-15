@@ -48,7 +48,7 @@ function ExtTab<T extends ExtHeader>({
 }) {
   const { data, error, reload } = load
   const gid = useGroupId()
-  const session = (id: number) => {
+  const session = (id: string) => {
     const s = sessions.find((x) => x.id === id)
     return s ? { id, title: sessionTitle(s) } : undefined
   }

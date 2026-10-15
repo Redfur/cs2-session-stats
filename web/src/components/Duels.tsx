@@ -102,7 +102,7 @@ export function MatchDuelsCard({
   reparsing,
   onReparse,
 }: {
-  matchId: number
+  matchId: string
   // меняется вместе со статусом матча: после пересчёта дуэли запрашиваются снова
   version: string
   reparsing: boolean
@@ -177,7 +177,7 @@ export function SessionDuelsCard({
   version: string
   // идёт пересчёт матчей сессии: показаны прежние дуэли
   reparsing: boolean
-  onReparse: (ids: number[]) => Promise<void>
+  onReparse: (ids: string[]) => Promise<void>
 }) {
   const gid = useGroupId()
   const { data, error, reload } = useDuels<SessionDuels>(() => api.getSessionDuels(sessionId), `${sessionId}|${version}`)

@@ -11,7 +11,7 @@ import { ProgressBar } from './ui/ProgressBar'
 interface ImportListProps {
   imports: Import[]
   // номер матча в сессии по id; undefined — матч в другой сессии или ещё не загружен
-  ordinalOf: (matchId: number) => number | undefined
+  ordinalOf: (matchId: string) => number | undefined
   // после действия страница перезагружает сессию
   onChanged: () => void
   onError: (title: string, text: string) => void
@@ -28,7 +28,7 @@ function resultLine(r: UploadResult, i: number, many: boolean, gid: string, ordi
     return (
       <>
         {map} →{' '}
-        <Link to={paths.match(gid, r.matchId ?? 0)} className="focus-ring">
+        <Link to={paths.match(gid, r.matchId ?? '')} className="focus-ring">
           матч{ordinal ? ` #${ordinal}` : ''}
         </Link>
       </>
@@ -37,7 +37,7 @@ function resultLine(r: UploadResult, i: number, many: boolean, gid: string, ordi
     return (
       <>
         {map} уже загружена —{' '}
-        <Link to={paths.anyMatch(r.matchId ?? 0)} className="focus-ring">
+        <Link to={paths.anyMatch(r.matchId ?? '')} className="focus-ring">
           {ordinal ? `матч #${ordinal}` : 'открыть матч'}
         </Link>
       </>
@@ -52,7 +52,7 @@ function resultLine(r: UploadResult, i: number, many: boolean, gid: string, ordi
 // ImportList — загрузки по ссылкам на матчи: сервер скачивает демки сам, страница показывает прогресс и итог.
 export function ImportList({ imports, ordinalOf, onChanged, onError }: ImportListProps) {
   const gid = useGroupId()
-  const [busy, setBusy] = useState<number | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
   if (imports.length === 0) return null
   const active = imports.filter(isImportActive).length
 

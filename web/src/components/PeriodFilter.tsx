@@ -21,8 +21,8 @@ export function SessionChecklist({ period, sessions }: { period: Period; session
       {sessions.map((s) => (
         <Checkbox
           key={s.id}
-          checked={period.selected.has(String(s.id))}
-          onChange={() => period.toggleSession(String(s.id))}
+          checked={period.selected.has(s.id)}
+          onChange={() => period.toggleSession(s.id)}
           count={s.matchCount}
         >
           <span className="overflow-hidden text-ellipsis whitespace-nowrap">{s.title || formatDateShort(s.date)}</span>

@@ -69,7 +69,7 @@ export function MatchPage() {
   const sessionId = data?.match.sessionId
   useEffect(() => {
     if (sessionId === undefined) return
-    api.getSession(String(sessionId)).then(setSession, () => setSession(null))
+    api.getSession(sessionId).then(setSession, () => setSession(null))
   }, [sessionId])
 
   // пока матч в очереди или в обработке — опрашиваем сервер
@@ -107,7 +107,7 @@ export function MatchPage() {
     )
   if (!data) return <PageLoading />
   // адрес без группы или с чужой группой — переход на адрес группы сессии матча
-  if (String(data.groupId) !== gid) return <Navigate replace to={{ pathname: paths.match(data.groupId, id), search }} />
+  if (data.groupId !== gid) return <Navigate replace to={{ pathname: paths.match(data.groupId, id), search }} />
 
   const { match, players } = data
   const siblings = session && session.session.id === match.sessionId ? session.matches : null

@@ -5,7 +5,7 @@ import { plural } from '../../format'
 import { cx } from './cx'
 
 interface SwitcherGroup {
-  id: number
+  id: string
   name: string
   sessionCount: number
 }
@@ -14,7 +14,7 @@ interface GroupSwitcherProps {
   groups: SwitcherGroup[]
   current: SwitcherGroup
   // адрес, который открывается при выборе группы
-  hrefFor: (id: number) => string
+  hrefFor: (id: string) => string
   onCreate: () => void
   // меню открыли: можно обновить число сессий
   onOpen?: () => void

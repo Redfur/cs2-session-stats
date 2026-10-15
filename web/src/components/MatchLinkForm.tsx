@@ -31,7 +31,7 @@ function sessionLabel(r: ImportAddResult) {
 }
 
 function noteOf(r: ImportAddResult, sessionId: string, gid: string, many: boolean): Note | null {
-  const here = String(r.sessionId) === sessionId
+  const here = r.sessionId === sessionId
   switch (r.status) {
     case 'error':
       return { error: true, text: many ? `${r.url} — ${r.error}` : r.error }
@@ -41,7 +41,7 @@ function noteOf(r: ImportAddResult, sessionId: string, gid: string, many: boolea
         text: here ? (
           <>
             Матч {matchNumber(r)} уже есть в сессии —{' '}
-            <Link to={paths.match(gid, r.matchId ?? 0)} className="focus-ring">
+            <Link to={paths.match(gid, r.matchId ?? '')} className="focus-ring">
               матч #{r.ordinal}
             </Link>
             . Повторно не добавлен.
@@ -49,7 +49,7 @@ function noteOf(r: ImportAddResult, sessionId: string, gid: string, many: boolea
         ) : (
           <>
             Матч {matchNumber(r)} уже есть в сессии «{sessionLabel(r)}» —{' '}
-            <Link to={paths.anyMatch(r.matchId ?? 0)} className="focus-ring">
+            <Link to={paths.anyMatch(r.matchId ?? '')} className="focus-ring">
               открыть матч
             </Link>
             . Повторно не добавлен.
@@ -64,7 +64,7 @@ function noteOf(r: ImportAddResult, sessionId: string, gid: string, many: boolea
         ) : (
           <>
             Матч {matchNumber(r)} уже скачивается в сессии{' '}
-            <Link to={paths.anySession(r.sessionId ?? 0)} className="focus-ring">
+            <Link to={paths.anySession(r.sessionId ?? '')} className="focus-ring">
               «{sessionLabel(r)}»
             </Link>
             .

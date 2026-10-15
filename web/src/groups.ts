@@ -11,17 +11,17 @@ export function useGroupId(): string {
 
 // Адреса страниц группы. Внутренние ссылки строятся только через них, чтобы не выпасть из группы.
 export const paths = {
-  sessions: (gid: string | number) => `/g/${gid}`,
-  session: (gid: string | number, id: string | number) => `/g/${gid}/sessions/${id}`,
-  match: (gid: string | number, id: string | number) => `/g/${gid}/matches/${id}`,
-  players: (gid: string | number) => `/g/${gid}/players`,
+  sessions: (gid: string) => `/g/${gid}`,
+  session: (gid: string, id: string) => `/g/${gid}/sessions/${id}`,
+  match: (gid: string, id: string) => `/g/${gid}/matches/${id}`,
+  players: (gid: string) => `/g/${gid}/players`,
   // tab — '' (обзор), 'fight', 'weapons' или 'utility'
-  player: (gid: string | number, steamId: string, tab = '') => `/g/${gid}/players/${steamId}${tab ? `/${tab}` : ''}`,
-  group: (gid: string | number) => `/g/${gid}/group`,
+  player: (gid: string, steamId: string, tab = '') => `/g/${gid}/players/${steamId}${tab ? `/${tab}` : ''}`,
+  group: (gid: string) => `/g/${gid}/group`,
   // матч и сессия, группа которых может быть другой (дубликат при загрузке):
   // страница сама перейдёт на адрес своей группы
-  anyMatch: (id: string | number) => `/matches/${id}`,
-  anySession: (id: string | number) => `/sessions/${id}`,
+  anyMatch: (id: string) => `/matches/${id}`,
+  anySession: (id: string) => `/sessions/${id}`,
 }
 
 const LAST_GROUP_KEY = 'cs2stats.lastGroup'
@@ -43,9 +43,13 @@ export function saveLastGroup(gid: string) {
 }
 
 // pickGroup — последняя открытая группа, если она ещё есть, иначе первая; undefined — групп нет.
+// Сохранённое значение, которого нет в списке (удалённая группа, старый числовой id), заменяется первой группой.
 export function pickGroup(groups: Group[]): Group | undefined {
   const last = readLastGroup()
-  return groups.find((g) => String(g.id) === last) ?? groups[0]
+  const found = groups.find((g) => g.id === last)
+  if (found) return found
+  if (groups[0]) saveLastGroup(groups[0].id)
+  return groups[0]
 }
 
 export interface GroupsState {

@@ -34,14 +34,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     reload().catch(() => {})
   }, [reload])
 
-  const current = groups?.find((g) => String(g.id) === urlGid)
+  const current = groups?.find((g) => g.id === urlGid)
   useEffect(() => {
-    if (current) saveLastGroup(String(current.id))
+    if (current) saveLastGroup(current.id)
   }, [current])
 
   // группа шапки: из адреса, а пока список грузится — тоже из адреса; без неё — последняя открытая
   const shown = current ?? (urlGid ? undefined : groups ? pickGroup(groups) : undefined)
-  const gid = shown ? String(shown.id) : groups === null ? urlGid : ''
+  const gid = shown ? shown.id : groups === null ? urlGid : ''
 
   const nav: NavItem[] | undefined = gid
     ? [

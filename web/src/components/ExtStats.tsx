@@ -92,7 +92,7 @@ export function ExtError({ title, text, onRetry }: { title: string; text: string
   )
 }
 
-export function ExtNotComputed({ text, session }: { text: ReactNode; session?: { id: number; title: string } }) {
+export function ExtNotComputed({ text, session }: { text: ReactNode; session?: { id: string; title: string } }) {
   const gid = useGroupId()
   return (
     <Card as="div">
@@ -120,7 +120,7 @@ const ordinals = (list: { ordinal: number }[]) =>
     .replace(/, ([^,]*)$/, ' и $1')
 
 // ExtAlerts — пересчёт и его ошибка под шапкой страницы: прежние данные остаются на месте.
-export function ExtAlerts({ header, sessionLink }: { header: ExtHeader; sessionLink?: (id: number) => ReactNode }) {
+export function ExtAlerts({ header, sessionLink }: { header: ExtHeader; sessionLink?: (id: string) => ReactNode }) {
   const partial = header.coveredMatches < header.eligibleMatches
   const kept = partial
     ? `Прежние данные сохранены: подробная статистика — ${byMaps(header.coveredMatches)} из ${header.eligibleMatches}.`

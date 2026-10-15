@@ -14,10 +14,10 @@ export function PlayerLink({ steamId, ...rest }: LinkProps & { steamId: string }
   return <Link to={paths.player(useGroupId(), steamId)} {...rest} />
 }
 
-export function SessionLink({ id, ...rest }: LinkProps & { id: number }) {
+export function SessionLink({ id, ...rest }: LinkProps & { id: string }) {
   return <Link to={paths.session(useGroupId(), id)} {...rest} />
 }
 
-export function MatchLink({ id, ...rest }: LinkProps & { id: number }) {
+export function MatchLink({ id, ...rest }: LinkProps & { id: string }) {
   return <Link to={paths.match(useGroupId(), id)} {...rest} />
 }

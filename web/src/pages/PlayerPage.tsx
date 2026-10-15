@@ -90,7 +90,13 @@ const MAP_COLUMNS: Column<ProfileMap>[] = [
 const ownScore = (m: ProfileMatch) => (m.team === 'B' ? [m.scoreB, m.scoreA] : [m.scoreA, m.scoreB])
 const RESULT_ORDER = { win: 2, draw: 1, loss: 0 } as const
 
-const MATCH_COLUMNS: Column<ProfileMatch>[] = [
+// TimedMatch — матч профиля с местом во времени: сервер отдаёт матчи от новых к старым
+// (дата сессии, порядок создания сессий одной даты, номер матча), а id случайные и порядка не задают.
+type TimedMatch = ProfileMatch & { timeOrder: number }
+
+const withTimeOrder = (list: ProfileMatch[]): TimedMatch[] => list.map((m, i) => ({ ...m, timeOrder: list.length - i }))
+
+const MATCH_COLUMNS: Column<TimedMatch>[] = [
   {
     key: 'session',
     label: 'Сессия',
@@ -108,7 +114,7 @@ const MATCH_COLUMNS: Column<ProfileMatch>[] = [
     name: 'по времени',
     numeric: true,
     width: 44,
-    value: (m) => `${m.sessionDate}|${String(m.sessionId).padStart(10, '0')}|${String(m.ordinal).padStart(4, '0')}`,
+    value: (m) => m.timeOrder,
     render: (m) => (
       <MatchLink id={m.matchId} className="focus-ring font-bold">
         {m.ordinal}
@@ -400,7 +406,7 @@ function Overview({ data, steamId, query, ss, sm, sx }: OverviewProps) {
         id="mm-h"
         title="Матчи"
         columns={MATCH_COLUMNS}
-        rows={data.matches}
+        rows={withTimeOrder(data.matches)}
         rowKey={(m) => m.matchId}
         sort={sx}
         minWidth={868}

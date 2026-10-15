@@ -12,11 +12,11 @@ interface UploadListProps {
   items: UploadItem[]
   // номер, который получит первый ещё не принятый файл
   nextNumber: number
-  sessionId: number
+  sessionId: string
   // номер матча в сессии по id; undefined, пока сессия не перезагружена
-  ordinalOf: (matchId: number) => number | undefined
+  ordinalOf: (matchId: string) => number | undefined
   // адрес матча; sessionId — сессия матча (у дубликата может быть другой)
-  matchHref: (matchId: number, sessionId: number) => string
+  matchHref: (matchId: string, sessionId: string) => string
   onCancel: (id: number) => void
   onCancelAll: () => void
   onClear: () => void
@@ -105,7 +105,7 @@ export function UploadList({ items, nextNumber, sessionId, ordinalOf, matchHref,
           meta = (
             <>
               {size} ·{' '}
-              <Link to={matchHref(it.result?.matchId ?? 0, it.result?.sessionId ?? sessionId)} className="focus-ring">
+              <Link to={matchHref(it.result?.matchId ?? '', it.result?.sessionId ?? sessionId)} className="focus-ring">
                 открыть матч{ordinal ? ` #${ordinal}` : ''}
               </Link>
             </>
@@ -120,7 +120,7 @@ export function UploadList({ items, nextNumber, sessionId, ordinalOf, matchHref,
           meta = (
             <>
               Эта демка уже есть{here ? ' в сессии' : ' в другой сессии'} —{' '}
-              <Link to={matchHref(it.result?.matchId ?? 0, it.result?.sessionId ?? sessionId)} className="focus-ring">
+              <Link to={matchHref(it.result?.matchId ?? '', it.result?.sessionId ?? sessionId)} className="focus-ring">
                 открыть матч
               </Link>
               . Повторно не добавлена.

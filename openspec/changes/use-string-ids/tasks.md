@@ -20,8 +20,8 @@
 
 ## 4. Интерфейс
 
-- [ ] 4.1 `web/src/api.ts` и компоненты: id объектов — `string` (`Group`, `Session`, `Match`, загрузки, результаты добавления ссылок и загрузки демки, `uncoveredMatches`, `reorderMatches`, `retryImport`, `deleteImport`, `SessionPage.ordinalOf`, `ExtStats.ExtNotComputed`), `paths` без `number`; `npx tsc -b --noEmit` и `npm run lint` проходят
-- [ ] 4.2 Последняя группа: сохранённое значение, которого нет в списке групп (в том числе числовое), заменяется первой группой и перезаписывается; проверка headless-Chromium: с `cs2stats.lastGroup = "1"` главная открывает первую группу и сохраняет её строковый id; `/g/1/sessions/3` показывает «не найдено» без перехода; навигация по группе, сессии, матчу, игроку и странице группы работает, адреса — со строковыми id
+- [x] 4.1 `web/src/api.ts` и компоненты: id объектов — `string` (`Group`, `Session`, `Match`, загрузки, результаты добавления ссылок и загрузки демки, `uncoveredMatches`, `reorderMatches`, `retryImport`, `deleteImport`, `SessionPage.ordinalOf`, `ExtStats.ExtNotComputed`), `paths` без `number`; `npx tsc -b --noEmit` и `npm run lint` проходят
+- [x] 4.2 Последняя группа: сохранённое значение, которого нет в списке групп (в том числе числовое), заменяется первой группой и перезаписывается; проверка headless-Chromium: с `cs2stats.lastGroup = "1"` главная открывает первую группу и сохраняет её строковый id; `/g/1/sessions/3` показывает «не найдено» без перехода; навигация по группе, сессии, матчу, игроку и странице группы работает, адреса — со строковыми id
 
 ## 5. Проверка целиком
 

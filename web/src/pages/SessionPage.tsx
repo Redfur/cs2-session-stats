@@ -67,14 +67,14 @@ export function SessionPage() {
   // ошибка действия над матчами живёт отдельно: load() после действия сбрасывает error
   const [actionError, setActionError] = useState<{ title: string; text: string } | null>(null)
   // id матчей, замеченных в пересчёте с момента, когда пересчитываемых не было (плашка прогресса)
-  const [reparseIds, setReparseIds] = useState<number[]>([])
+  const [reparseIds, setReparseIds] = useState<string[]>([])
   const [editing, setEditing] = useState<'title' | 'date' | null>(null)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
-  const [movedId, setMovedId] = useState<number | null>(null)
+  const [movedId, setMovedId] = useState<string | null>(null)
   const [orderStatus, setOrderStatus] = useState('')
   // идёт сохранение порядка: ответы опроса не перетирают локальный порядок
   const saving = useRef(false)
-  const pendingOrder = useRef<number[] | null>(null)
+  const pendingOrder = useRef<string[] | null>(null)
 
   const load = useCallback(() => {
     api.getSession(id).then(
@@ -128,7 +128,7 @@ export function SessionPage() {
     )
   if (!data) return <PageLoading />
   // адрес без группы или с чужой группой — переход на адрес группы сессии
-  if (String(data.session.groupId) !== gid) return <Navigate replace to={{ pathname: paths.session(data.session.groupId, id), search }} />
+  if (data.session.groupId !== gid) return <Navigate replace to={{ pathname: paths.session(data.session.groupId, id), search }} />
 
   const { session, matches, players, imports } = data
   const title = sessionTitle(session)
@@ -140,7 +140,7 @@ export function SessionPage() {
   // Сохраняет порядок полным списком матчей. Запросы идут последовательно, на сервер уходит
   // последний порядок. Если сервер отклонил список (например, он устарел), показываем ошибку
   // и перезагружаем актуальный порядок.
-  async function saveOrder(ids: number[]) {
+  async function saveOrder(ids: string[]) {
     pendingOrder.current = ids
     if (saving.current) return
     saving.current = true
@@ -196,7 +196,7 @@ export function SessionPage() {
 
   const processingNumbers = matches.flatMap((m, i) => (!m.hasResult && isProcessing(m) ? [`#${i + 1}`] : []))
 
-  const ordinalOf = (matchId: number) => {
+  const ordinalOf = (matchId: string) => {
     const i = matches.findIndex((m) => m.id === matchId)
     return i >= 0 ? i + 1 : undefined
   }
@@ -543,7 +543,7 @@ interface SessionDetailTotalsProps {
   players: PlayerRow[]
   sort: { sort: SortState; toggle: (key: string) => void }
   reparsing: boolean
-  onReparse: (ids: number[]) => Promise<void>
+  onReparse: (ids: string[]) => Promise<void>
 }
 
 // SessionDetailTotals — итоги сессии «Подробно»: размены, клатчи, гранаты, выживание.

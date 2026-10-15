@@ -16,12 +16,12 @@ interface MatchesTableProps {
   onMove: (from: number, to: number) => void
   onDelete: (m: Match, number: number) => void
   // подсветить матч, который только что переставили
-  movedId?: number | null
+  movedId?: string | null
   labelledBy: string
 }
 
 interface DragState {
-  id: number
+  id: string
   from: number
   startY: number
   // перетаскивание началось после сдвига указателя на несколько пикселей
@@ -36,11 +36,11 @@ const DRAG_THRESHOLD = 4
 // на любую позицию, Esc отменяет перетаскивание. С клавиатуры на ручке ↑/↓ сдвигают матч на одну позицию.
 export function MatchesTable({ matches, onMove, onDelete, movedId, labelledBy }: MatchesTableProps) {
   const gid = useGroupId()
-  const rows = useRef(new Map<number, HTMLTableRowElement>())
-  const grips = useRef(new Map<number, HTMLButtonElement>())
+  const rows = useRef(new Map<string, HTMLTableRowElement>())
+  const grips = useRef(new Map<string, HTMLButtonElement>())
   const [drag, setDrag] = useState<DragState | null>(null)
   // ручка, на которой нужно сохранить фокус после перестановки с клавиатуры
-  const [focusId, setFocusId] = useState<number | null>(null)
+  const [focusId, setFocusId] = useState<string | null>(null)
 
   useLayoutEffect(() => {
     if (focusId !== null) grips.current.get(focusId)?.focus()
@@ -74,7 +74,7 @@ export function MatchesTable({ matches, onMove, onDelete, movedId, labelledBy }:
     return to === d.from ? null : to
   }
 
-  const handlers = (id: number, index: number) => ({
+  const handlers = (id: string, index: number) => ({
     onPointerDown: (e: PointerEvent<HTMLButtonElement>) => {
       if (e.button !== 0) return
       e.currentTarget.setPointerCapture(e.pointerId)

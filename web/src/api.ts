@@ -6,7 +6,7 @@ export type MatchStatus = 'pending' | 'parsing' | 'done' | 'failed'
 
 // Group — компания: свои сессии, статистика и рейтинг.
 export interface Group {
-  id: number
+  id: string
   name: string
   createdAt: string
   sessionCount: number
@@ -19,8 +19,8 @@ export interface GroupSummary extends Group {
 }
 
 export interface Session {
-  id: number
-  groupId: number
+  id: string
+  groupId: string
   date: string
   title: string
   createdAt: string
@@ -37,8 +37,8 @@ export interface SessionSummary extends Session {
 }
 
 export interface Match {
-  id: number
-  sessionId: number
+  id: string
+  sessionId: string
   ordinal: number
   sha256: string
   originalName: string
@@ -106,7 +106,7 @@ export interface OVR {
 
 // SessionChange — OVR до и после сессии; разницы посчитаны по округлённым баллам.
 export interface SessionChange {
-  sessionId: number
+  sessionId: string
   // оценка за сессию
   score: number
   // нет — сессия у игрока первая
@@ -139,8 +139,8 @@ export type ImportStatus = 'queued' | 'downloading' | 'done' | 'failed'
 
 // Import — загрузка по ссылке на матч платформы, демку скачивает сервер.
 export interface Import {
-  id: number
-  sessionId: number
+  id: string
+  sessionId: string
   url: string
   platform: string
   externalId: string
@@ -160,18 +160,18 @@ export interface ImportAddResult {
   status: 'accepted' | 'retried' | 'exists' | 'downloading' | 'error'
   platform?: string
   externalId?: string
-  importId?: number
-  sessionId?: number
+  importId?: string
+  sessionId?: string
   sessionTitle?: string
   sessionDate?: string
-  matchId?: number
+  matchId?: string
   ordinal?: number
   error?: string
 }
 
 export interface MatchDetails {
   // группа сессии матча
-  groupId: number
+  groupId: string
   match: Match
   players: PlayerRow[]
   teams: { A?: TeamOVR; B?: TeamOVR }
@@ -190,8 +190,8 @@ export interface ProfileMap extends PlayerRow {
 }
 
 export interface ProfileMatch extends PlayerRow {
-  matchId: number
-  sessionId: number
+  matchId: string
+  sessionId: string
   sessionDate: string
   sessionTitle: string
   ordinal: number
@@ -244,7 +244,7 @@ export interface SessionDuels {
   eligibleMatches: number
   coveredMatches: number
   // матчи с результатом, обработанные до появления дуэлей
-  uncoveredMatches: { id: number; ordinal: number }[]
+  uncoveredMatches: { id: string; ordinal: number }[]
   players: DuelPlayer[]
   cells: DuelCell[]
 }
@@ -273,8 +273,8 @@ export interface PlayerDuels {
 export interface UploadResult {
   fileName: string
   status: 'accepted' | 'duplicate' | 'error'
-  matchId?: number
-  sessionId?: number
+  matchId?: string
+  sessionId?: string
   error?: string
 }
 
@@ -285,8 +285,8 @@ export type ExtStatus = 'no_matches' | 'unavailable' | 'partial' | 'complete'
 export type MissingReason = 'old' | 'no_damage' | 'no_flash'
 
 export interface MissingMatch {
-  id: number
-  sessionId: number
+  id: string
+  sessionId: string
   ordinal: number
   map: string
   reason: MissingReason
@@ -301,8 +301,8 @@ export interface ExtMetric {
 }
 
 export interface MatchRef {
-  id: number
-  sessionId: number
+  id: string
+  sessionId: string
   ordinal: number
   error?: string
 }
@@ -499,18 +499,18 @@ export const api = {
   // удаляет сессию с матчами и файлами демок; ответ 204 без тела
   deleteSession: (id: string) => request<void>('DELETE', `/api/sessions/${id}`),
   // matchIds — все матчи сессии в новом порядке
-  reorderMatches: (sessionId: string, matchIds: number[]) =>
+  reorderMatches: (sessionId: string, matchIds: string[]) =>
     request<Match[]>('PUT', `/api/sessions/${sessionId}/order`, { matchIds }),
-  deleteMatch: (id: string | number) => request<void>('DELETE', `/api/matches/${id}`),
+  deleteMatch: (id: string) => request<void>('DELETE', `/api/matches/${id}`),
   getMatch: (id: string) => request<MatchDetails>('GET', `/api/matches/${id}`),
-  reparseMatch: (id: string | number) => request<Match>('POST', `/api/matches/${id}/reparse`),
+  reparseMatch: (id: string) => request<Match>('POST', `/api/matches/${id}/reparse`),
   reparseSession: (id: string) => request<{ queued: number }>('POST', `/api/sessions/${id}/reparse`),
   // query — строка параметров фильтра без «?» (from, to, session, player, together, minMatches)
   listPlayers: (gid: string, query: string) => request<PlayersResponse>('GET', `/api/groups/${gid}/players?${query}`),
   getPlayer: (gid: string, steamId: string, query: string) =>
     request<PlayerProfile>('GET', `/api/groups/${gid}/players/${steamId}?${query}`),
-  getMatchDuels: (id: string | number) => request<MatchDuels>('GET', `/api/matches/${id}/duels`),
-  getSessionDuels: (id: string | number) => request<SessionDuels>('GET', `/api/sessions/${id}/duels`),
+  getMatchDuels: (id: string) => request<MatchDuels>('GET', `/api/matches/${id}/duels`),
+  getSessionDuels: (id: string) => request<SessionDuels>('GET', `/api/sessions/${id}/duels`),
   getPlayerDuels: (gid: string, steamId: string, query: string) =>
     request<PlayerDuels>('GET', `/api/groups/${gid}/players/${steamId}/duels?${query}`),
   getPlayerFight: (gid: string, steamId: string, query: string) =>
@@ -519,14 +519,14 @@ export const api = {
     request<PlayerWeapons>('GET', `/api/groups/${gid}/players/${steamId}/weapons?${query}`),
   getPlayerUtility: (gid: string, steamId: string, query: string) =>
     request<PlayerUtility>('GET', `/api/groups/${gid}/players/${steamId}/utility?${query}`),
-  getMatchExt: (id: string | number) => request<MatchExt>('GET', `/api/matches/${id}/ext`),
-  getSessionExt: (id: string | number) => request<SessionExt>('GET', `/api/sessions/${id}/ext`),
+  getMatchExt: (id: string) => request<MatchExt>('GET', `/api/matches/${id}/ext`),
+  getSessionExt: (id: string) => request<SessionExt>('GET', `/api/sessions/${id}/ext`),
   // text — ввод поля как есть: ссылки через пробел или перевод строки
   addImports: (sessionId: string, text: string) =>
     request<ImportAddResult[]>('POST', `/api/sessions/${sessionId}/imports`, { text }),
-  retryImport: (id: number) => request<Import>('POST', `/api/imports/${id}/retry`),
+  retryImport: (id: string) => request<Import>('POST', `/api/imports/${id}/retry`),
   // убирает загрузку и прерывает скачивание; созданные матчи остаются
-  deleteImport: (id: number) => request<void>('DELETE', `/api/imports/${id}`),
+  deleteImport: (id: string) => request<void>('DELETE', `/api/imports/${id}`),
 
   // Отправляет один файл. XHR вместо fetch: у fetch нет прогресса отправки, а демки весят сотни мегабайт.
   // При signal.abort() отправка обрывается, промис отклоняется с DOMException AbortError.
