@@ -71,7 +71,7 @@ type matchDuelsResponse struct {
 }
 
 func (s *Server) getMatchDuels(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := matchKey(w, r)
 	if !ok {
 		return
 	}
@@ -103,8 +103,8 @@ func (s *Server) getMatchDuels(w http.ResponseWriter, r *http.Request) {
 }
 
 type duelMatchRef struct {
-	ID      int64 `json:"id"`
-	Ordinal int   `json:"ordinal"`
+	ID      string `json:"id"`
+	Ordinal int    `json:"ordinal"`
 }
 
 type sessionDuelsResponse struct {
@@ -117,7 +117,7 @@ type sessionDuelsResponse struct {
 }
 
 func (s *Server) getSessionDuels(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := sessionKey(w, r)
 	if !ok {
 		return
 	}

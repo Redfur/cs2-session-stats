@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+
+	"cs2stats/internal/ids"
 )
 
 // ErrGroupNotEmpty — удалить можно только группу без сессий.
@@ -11,7 +13,7 @@ var ErrGroupNotEmpty = errors.New("в группе есть сессии — с�
 
 // Group — компания друзей: свои сессии, статистика и рейтинг.
 type Group struct {
-	ID           int64  `json:"id"`
+	ID           string `json:"id"`
 	Name         string `json:"name"`
 	CreatedAt    string `json:"createdAt"`
 	SessionCount int    `json:"sessionCount"`
@@ -37,7 +39,7 @@ func scanGroup(row scanner) (Group, error) {
 
 // ListGroups возвращает группы в порядке создания с числом сессий.
 func (s *Store) ListGroups(ctx context.Context) ([]Group, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT "+groupColumns+" FROM groups g ORDER BY g.id")
+	rows, err := s.db.QueryContext(ctx, "SELECT "+groupColumns+" FROM groups g ORDER BY g.seq")
 	if err != nil {
 		return nil, err
 	}
@@ -56,20 +58,24 @@ func (s *Store) ListGroups(ctx context.Context) ([]Group, error) {
 // CreateGroup создаёт группу. Название проверяет вызывающий код.
 func (s *Store) CreateGroup(ctx context.Context, name string) (Group, error) {
 	g := Group{Name: name, CreatedAt: s.timestamp()}
-	res, err := s.db.ExecContext(ctx, "INSERT INTO groups (name, created_at) VALUES (?, ?)", g.Name, g.CreatedAt)
+	err := insertWithNewID(ids.Group, "groups.id", func(id string) error {
+		g.ID = id
+		_, err := s.db.ExecContext(ctx, "INSERT INTO groups (id, seq, name, created_at) VALUES (?, "+nextSeq("groups")+", ?, ?)",
+			g.ID, g.Name, g.CreatedAt)
+		return err
+	})
 	if err != nil {
 		return Group{}, err
 	}
-	g.ID, err = res.LastInsertId()
-	return g, err
+	return g, nil
 }
 
-func (s *Store) GetGroup(ctx context.Context, id int64) (Group, error) {
+func (s *Store) GetGroup(ctx context.Context, id string) (Group, error) {
 	return scanGroup(s.db.QueryRowContext(ctx, "SELECT "+groupColumns+" FROM groups g WHERE g.id = ?", id))
 }
 
 // GroupSummary возвращает группу с числом матчей с результатом и разных игроков в них.
-func (s *Store) GroupSummary(ctx context.Context, id int64) (GroupSummary, error) {
+func (s *Store) GroupSummary(ctx context.Context, id string) (GroupSummary, error) {
 	g, err := s.GetGroup(ctx, id)
 	if err != nil {
 		return GroupSummary{}, err
@@ -85,7 +91,7 @@ func (s *Store) GroupSummary(ctx context.Context, id int64) (GroupSummary, error
 }
 
 // RenameGroup меняет название группы. Название проверяет вызывающий код.
-func (s *Store) RenameGroup(ctx context.Context, id int64, name string) (Group, error) {
+func (s *Store) RenameGroup(ctx context.Context, id string, name string) (Group, error) {
 	res, err := s.db.ExecContext(ctx, "UPDATE groups SET name = ? WHERE id = ?", name, id)
 	if err != nil {
 		return Group{}, err
@@ -97,7 +103,7 @@ func (s *Store) RenameGroup(ctx context.Context, id int64, name string) (Group, 
 }
 
 // DeleteGroup удаляет группу без сессий; у группы с сессиями — ErrGroupNotEmpty.
-func (s *Store) DeleteGroup(ctx context.Context, id int64) error {
+func (s *Store) DeleteGroup(ctx context.Context, id string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

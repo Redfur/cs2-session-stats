@@ -7,7 +7,7 @@ const requeueSet = `UPDATE matches SET status = 'pending', error = ''
 	WHERE status NOT IN ('pending', 'parsing')`
 
 // RequeueMatch ставит матч в очередь на пересчёт и возвращает его актуальное состояние.
-func (s *Store) RequeueMatch(ctx context.Context, id int64) (Match, error) {
+func (s *Store) RequeueMatch(ctx context.Context, id string) (Match, error) {
 	if _, err := s.db.ExecContext(ctx, requeueSet+" AND id = ?", id); err != nil {
 		return Match{}, err
 	}
@@ -16,7 +16,7 @@ func (s *Store) RequeueMatch(ctx context.Context, id int64) (Match, error) {
 
 // RequeueSession ставит в очередь все матчи сессии и возвращает число поставленных.
 // Существование сессии проверяет вызывающий код.
-func (s *Store) RequeueSession(ctx context.Context, sessionID int64) (int64, error) {
+func (s *Store) RequeueSession(ctx context.Context, sessionID string) (int64, error) {
 	return s.requeue(ctx, requeueSet+" AND session_id = ?", sessionID)
 }
 

@@ -3,8 +3,8 @@ package api
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -15,8 +15,8 @@ import (
 func TestUpdateSession(t *testing.T) {
 	e := newTestEnv(t)
 	var sess store.Session
-	e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{"date":"2026-10-08","title":"Четверг"}`), &sess)
-	path := "/api/sessions/" + strconv.FormatInt(sess.ID, 10)
+	e.do(t, "POST", "/api/groups/"+e.gid+"/sessions", "application/json", []byte(`{"date":"2026-10-08","title":"Четверг"}`), &sess)
+	path := "/api/sessions/" + sess.ID
 
 	var got store.Session
 	if code := e.do(t, "PATCH", path, "application/json", []byte(`{"date":"2026-10-09","title":"  Пятничный микс "}`), &got); code != 200 {
@@ -52,8 +52,8 @@ func TestUpdateSession(t *testing.T) {
 func TestDeleteMatchAndSession(t *testing.T) {
 	e := newTestEnv(t)
 	var sess store.Session
-	e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{}`), &sess)
-	sid := strconv.FormatInt(sess.ID, 10)
+	e.do(t, "POST", "/api/groups/"+e.gid+"/sessions", "application/json", []byte(`{}`), &sess)
+	sid := sess.ID
 
 	demos := map[string][]byte{"a.dem": []byte("HL2DEMO a"), "b.dem": []byte("HL2DEMO b"), "c.dem": []byte("HL2DEMO c")}
 	upload := func(name string) ingest.FileResult {
@@ -73,17 +73,17 @@ func TestDeleteMatchAndSession(t *testing.T) {
 	a, b, c := upload("a.dem"), upload("b.dem"), upload("c.dem")
 
 	// удаление матча: 204, файл удалён, номера сдвинулись
-	if code := e.do(t, "DELETE", "/api/matches/"+strconv.FormatInt(b.MatchID, 10), "", nil, nil); code != 204 {
+	if code := e.do(t, "DELETE", "/api/matches/"+b.MatchID, "", nil, nil); code != 204 {
 		t.Fatalf("удаление матча: %d", code)
 	}
 	if fileExists("b.dem") || !fileExists("a.dem") {
 		t.Fatal("удалён не тот файл демки")
 	}
 	var errResp map[string]string
-	if code := e.do(t, "GET", "/api/matches/"+strconv.FormatInt(b.MatchID, 10), "", nil, &errResp); code != 404 {
+	if code := e.do(t, "GET", "/api/matches/"+b.MatchID, "", nil, &errResp); code != 404 {
 		t.Errorf("удалённый матч доступен: %d", code)
 	}
-	if code := e.do(t, "DELETE", "/api/matches/"+strconv.FormatInt(b.MatchID, 10), "", nil, &errResp); code != 404 {
+	if code := e.do(t, "DELETE", "/api/matches/"+b.MatchID, "", nil, &errResp); code != 404 {
 		t.Errorf("повторное удаление матча: %d", code)
 	}
 	cm, _ := e.store.GetMatch(t.Context(), c.MatchID)
@@ -108,7 +108,7 @@ func TestDeleteMatchAndSession(t *testing.T) {
 	if code := e.do(t, "GET", "/api/sessions/"+sid, "", nil, &errResp); code != 404 {
 		t.Errorf("удалённая сессия доступна: %d", code)
 	}
-	if code := e.do(t, "GET", "/api/matches/"+strconv.FormatInt(a.MatchID, 10), "", nil, &errResp); code != 404 {
+	if code := e.do(t, "GET", "/api/matches/"+a.MatchID, "", nil, &errResp); code != 404 {
 		t.Errorf("матч удалённой сессии доступен: %d", code)
 	}
 	if code := e.do(t, "DELETE", "/api/sessions/"+sid, "", nil, &errResp); code != 404 {
@@ -117,8 +117,8 @@ func TestDeleteMatchAndSession(t *testing.T) {
 
 	// демка удалённой сессии загружается в другую как новая
 	var other store.Session
-	e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{}`), &other)
-	sid = strconv.FormatInt(other.ID, 10)
+	e.do(t, "POST", "/api/groups/"+e.gid+"/sessions", "application/json", []byte(`{}`), &other)
+	sid = other.ID
 	if again := upload("a.dem"); again.Status != ingest.Accepted {
 		t.Fatalf("повторная загрузка после удаления сессии: %+v", again)
 	}
@@ -127,18 +127,22 @@ func TestDeleteMatchAndSession(t *testing.T) {
 func TestReorderMatches(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := t.Context()
-	sess, _ := e.store.CreateSession(ctx, 1, "2026-10-08", "")
-	other, _ := e.store.CreateSession(ctx, 1, "2026-10-09", "")
+	sess, _ := e.store.CreateSession(ctx, e.gid, "2026-10-08", "")
+	other, _ := e.store.CreateSession(ctx, e.gid, "2026-10-09", "")
 	var ids []string
 	for _, sha := range []string{"A", "B", "C"} {
 		m, _ := e.store.AddMatch(ctx, sess.ID, sha, sha+".dem")
-		ids = append(ids, strconv.FormatInt(m.ID, 10))
+		ids = append(ids, m.ID)
 	}
 	foreign, _ := e.store.AddMatch(ctx, other.ID, "D", "D.dem")
-	path := "/api/sessions/" + strconv.FormatInt(sess.ID, 10) + "/order"
+	path := "/api/sessions/" + sess.ID + "/order"
 
 	var list []store.Match
-	body := `{"matchIds":[` + ids[0] + `,` + ids[2] + `,` + ids[1] + `]}`
+	order := func(ids ...any) string {
+		b, _ := json.Marshal(map[string]any{"matchIds": ids})
+		return string(b)
+	}
+	body := order(ids[0], ids[2], ids[1])
 	if code := e.do(t, "PUT", path, "application/json", []byte(body), &list); code != 200 {
 		t.Fatalf("перестановка: %d", code)
 	}
@@ -147,8 +151,11 @@ func TestReorderMatches(t *testing.T) {
 	}
 
 	bad := []string{
-		`{"matchIds":[` + ids[0] + `,` + ids[1] + `]}`,
-		`{"matchIds":[` + ids[0] + `,` + ids[1] + `,` + strconv.FormatInt(foreign.ID, 10) + `]}`,
+		order(ids[0], ids[1]),
+		order(ids[0], ids[1], foreign.ID),
+		order(ids[0], ids[1], "m_000000000000"), // id верного формата, которого нет
+		order(1, 2, 3),                          // числовые id
+		order(ids[0], ids[1], 3),
 		`{"matchIds":"x"}`,
 		`{`,
 	}
@@ -168,16 +175,16 @@ func TestReorderMatches(t *testing.T) {
 func TestDeleteMatchFileError(t *testing.T) {
 	e := newTestEnv(t)
 	var sess store.Session
-	e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{}`), &sess)
+	e.do(t, "POST", "/api/groups/"+e.gid+"/sessions", "application/json", []byte(`{}`), &sess)
 	ct, body := multipartBody(t, map[string][]byte{"a.dem": []byte("HL2DEMO a")})
 	var res []ingest.FileResult
-	e.do(t, "POST", "/api/sessions/"+strconv.FormatInt(sess.ID, 10)+"/demos", ct, body, &res)
+	e.do(t, "POST", "/api/sessions/"+sess.ID+"/demos", ct, body, &res)
 
 	if err := os.Chmod(e.demos.Dir, 0o500); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chmod(e.demos.Dir, 0o755) })
-	if code := e.do(t, "DELETE", "/api/matches/"+strconv.FormatInt(res[0].MatchID, 10), "", nil, nil); code != 204 {
+	if code := e.do(t, "DELETE", "/api/matches/"+res[0].MatchID, "", nil, nil); code != 204 {
 		t.Fatalf("удаление матча при ошибке файла: %d", code)
 	}
 	if _, err := e.store.GetMatch(t.Context(), res[0].MatchID); err == nil {

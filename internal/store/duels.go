@@ -57,7 +57,7 @@ func (s *Store) duelCells(ctx context.Context, from, where string, args ...any) 
 
 // MatchDuels возвращает дуэли матча. covered=false, если у матча нет результата или он
 // получен версией обработки без дуэлей.
-func (s *Store) MatchDuels(ctx context.Context, matchID int64) (covered bool, cells []DuelCell, err error) {
+func (s *Store) MatchDuels(ctx context.Context, matchID string) (covered bool, cells []DuelCell, err error) {
 	err = s.db.QueryRowContext(ctx,
 		"SELECT m.has_result = 1 AND "+duelsCovered+" FROM matches m WHERE m.id = ?", matchID).Scan(&covered)
 	if err != nil || !covered {
@@ -74,7 +74,7 @@ type SessionDuels struct {
 	Cells     []DuelCell
 }
 
-func (s *Store) SessionDuels(ctx context.Context, sessionID int64) (SessionDuels, error) {
+func (s *Store) SessionDuels(ctx context.Context, sessionID string) (SessionDuels, error) {
 	var r SessionDuels
 	if err := s.db.QueryRowContext(ctx,
 		"SELECT count(*) FROM matches WHERE session_id = ? AND has_result = 1", sessionID).Scan(&r.Eligible); err != nil {
@@ -159,11 +159,11 @@ func (s *Store) PlayerDuels(ctx context.Context, steamID uint64, f MatchFilter) 
 }
 
 // latestName — ник игрока из его последнего матча с результатом в группе (как в заголовке профиля).
-func (s *Store) latestName(ctx context.Context, steamID uint64, groupID int64) (string, error) {
+func (s *Store) latestName(ctx context.Context, steamID uint64, groupID string) (string, error) {
 	var name string
 	where, args := MatchFilter{GroupID: groupID}.where("m", "s")
 	err := s.db.QueryRowContext(ctx, `SELECT mp.name `+fromPlayerMatches+`
 		WHERE mp.steam_id = ? AND `+where+`
-		ORDER BY s.date DESC, s.id DESC, m.ordinal DESC LIMIT 1`, append([]any{int64(steamID)}, args...)...).Scan(&name)
+		ORDER BY s.date DESC, s.seq DESC, m.ordinal DESC LIMIT 1`, append([]any{int64(steamID)}, args...)...).Scan(&name)
 	return name, err
 }

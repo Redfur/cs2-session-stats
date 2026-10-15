@@ -9,7 +9,7 @@ import (
 
 // saveDuels сохраняет матч с игроками команд A и B и счётом каждой пары.
 // k[[2]uint64{x, y}] — сколько раз x убил y; пары соперников без записи — нули.
-func saveDuels(t *testing.T, s *Store, id int64, teamA, teamB []uint64, k map[[2]uint64]int, version int) {
+func saveDuels(t *testing.T, s *Store, id string, teamA, teamB []uint64, k map[[2]uint64]int, version int) {
 	t.Helper()
 	var r MatchResult
 	r.Rounds = 13
@@ -53,9 +53,9 @@ const (
 func TestSessionAndPlayerDuels(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	s1, _ := s.CreateSession(ctx, 1, "2026-10-01", "")
-	s2, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
-	s3, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
+	s1, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-01", "")
+	s2, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
+	s3, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-09", "")
 	ids := addMatches(t, s, s1.ID, "m1", "m2", "m3", "m4", "old")
 	// A против B три раза: 3:1, 0:0, 2:4; в m4 A и B вместе против C
 	saveDuels(t, s, ids[0], []uint64{dA}, []uint64{dB}, map[[2]uint64]int{{dA, dB}: 3, {dB, dA}: 1}, DuelsSinceVersion)
@@ -114,7 +114,7 @@ func TestSessionAndPlayerDuels(t *testing.T) {
 	if all.CoveredSessions != 2 {
 		t.Fatalf("сессий с дуэлями %d, ожидалось 2", all.CoveredSessions)
 	}
-	bySession, _ := s.PlayerDuels(ctx, dA, MatchFilter{SessionIDs: []int64{s2.ID}})
+	bySession, _ := s.PlayerDuels(ctx, dA, MatchFilter{SessionIDs: []string{s2.ID}})
 	if bySession.Eligible != 1 || len(bySession.Opponents) != 1 || bySession.Opponents[0].Kills != 7 {
 		t.Fatalf("по сессии: %+v", bySession)
 	}

@@ -24,8 +24,8 @@ type Params struct {
 
 // MatchRow — один игрок в одном матче. Строки идут в порядке игры, строки одного матча — подряд.
 type MatchRow struct {
-	MatchID   int64
-	SessionID int64
+	MatchID   string
+	SessionID string
 	SteamID   uint64
 	Team      string // для будущей поправки на силу соперников (roadmap 1.3)
 	stats.Counters
@@ -33,8 +33,8 @@ type MatchRow struct {
 
 // Step — состояние игрока до и после одного его матча.
 type Step struct {
-	MatchID   int64
-	SessionID int64
+	MatchID   string
+	SessionID string
 	Counters  stats.Counters
 	Value     float64 // значение матча (MatchValue)
 	// Round Swing игрока за раунд; HasSwing = false, если у матча нет данных о раундах
@@ -68,7 +68,7 @@ type Book struct {
 // Первая часть max даёт обычное среднее, взвешенное по раундам, пока матчей мало,
 // вторая — экспоненциальное затухание, при котором новые матчи весят больше.
 // swings — данные Round Swing по матчам; матч без них входит по Rating 2.0.
-func Build(rows []MatchRow, swings map[int64]SwingMatch, p Params) *Book {
+func Build(rows []MatchRow, swings map[string]SwingMatch, p Params) *Book {
 	b := &Book{params: p, players: map[uint64][]Step{}}
 	rounds := map[uint64]int{}
 	for start := 0; start < len(rows); {
@@ -126,7 +126,7 @@ func (b *Book) OVR(steamID uint64) (State, bool) {
 }
 
 // Before — R̄ игрока перед матчем; ok = false, если матч у него первый или игрок в нём не учтён.
-func (b *Book) Before(steamID uint64, matchID int64) (State, bool) {
+func (b *Book) Before(steamID uint64, matchID string) (State, bool) {
 	for _, st := range b.players[steamID] {
 		if st.MatchID == matchID {
 			if st.Index == 0 {
@@ -140,7 +140,7 @@ func (b *Book) Before(steamID uint64, matchID int64) (State, bool) {
 
 // SessionChange — R̄ игрока перед первым его матчем в сессии и после последнего.
 type SessionChange struct {
-	SessionID int64
+	SessionID string
 	Before    State
 	HasBefore bool // false — сессия у игрока первая
 	After     State
@@ -148,7 +148,7 @@ type SessionChange struct {
 }
 
 // Session — изменение R̄ игрока за сессию; ok = false, если он в ней не играл.
-func (b *Book) Session(steamID uint64, sessionID int64) (SessionChange, bool) {
+func (b *Book) Session(steamID uint64, sessionID string) (SessionChange, bool) {
 	ch := SessionChange{SessionID: sessionID}
 	found := false
 	var w weighted
@@ -191,7 +191,7 @@ func (b *Book) Last(steamID uint64, n int) (float64, bool) {
 }
 
 // Match — шаг игрока в матче; ok = false, если игрок в нём не учтён.
-func (b *Book) Match(steamID uint64, matchID int64) (Step, bool) {
+func (b *Book) Match(steamID uint64, matchID string) (Step, bool) {
 	for _, st := range b.players[steamID] {
 		if st.MatchID == matchID {
 			return st, true

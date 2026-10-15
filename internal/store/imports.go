@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+
+	"cs2stats/internal/ids"
 )
 
 type ImportStatus string
@@ -21,8 +23,8 @@ var ErrImportState = errors.New("действие недоступно в тек
 
 // Import — загрузка по ссылке на матч платформы.
 type Import struct {
-	ID         int64        `json:"id"`
-	SessionID  int64        `json:"sessionId"`
+	ID         string       `json:"id"`
+	SessionID  string       `json:"sessionId"`
 	URL        string       `json:"url"`
 	Platform   string       `json:"platform"`
 	ExternalID string       `json:"externalId"`
@@ -65,26 +67,32 @@ func (s *Store) queryImport(ctx context.Context, q string, args ...any) (Import,
 }
 
 // AddImport ставит загрузку в очередь. Сессия должна существовать.
-func (s *Store) AddImport(ctx context.Context, sessionID int64, url, platform, externalID string) (Import, error) {
-	return s.queryImport(ctx, `
-		INSERT INTO imports (session_id, url, platform, external_id, created_at)
-		VALUES (?, ?, ?, ?, ?)
-		RETURNING `+importColumns,
-		sessionID, url, platform, externalID, s.timestamp())
+func (s *Store) AddImport(ctx context.Context, sessionID string, url, platform, externalID string) (Import, error) {
+	var x Import
+	err := insertWithNewID(ids.Import, "imports.id", func(id string) error {
+		var err error
+		x, err = s.queryImport(ctx, `
+			INSERT INTO imports (id, seq, session_id, url, platform, external_id, created_at)
+			VALUES (?, `+nextSeq("imports")+`, ?, ?, ?, ?, ?)
+			RETURNING `+importColumns,
+			id, sessionID, url, platform, externalID, s.timestamp())
+		return err
+	})
+	return x, err
 }
 
-func (s *Store) GetImport(ctx context.Context, id int64) (Import, error) {
+func (s *Store) GetImport(ctx context.Context, id string) (Import, error) {
 	return s.queryImport(ctx, "SELECT "+importColumns+" FROM imports WHERE id = ?", id)
 }
 
 // ListSessionImports возвращает загрузки сессии, которые показываются на её странице:
 // в работе, упавшие и завершённые, у которых не все карты стали новыми матчами.
-func (s *Store) ListSessionImports(ctx context.Context, sessionID int64) ([]Import, error) {
+func (s *Store) ListSessionImports(ctx context.Context, sessionID string) ([]Import, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+importColumns+` FROM imports
 		WHERE session_id = ? AND (status <> 'done' OR EXISTS (
 			SELECT 1 FROM json_each(imports.results) WHERE json_extract(value, '$.status') <> 'accepted'))
-		ORDER BY id`, sessionID)
+		ORDER BY seq`, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +112,7 @@ func (s *Store) ListSessionImports(ctx context.Context, sessionID int64) ([]Impo
 func (s *Store) ClaimNextImport(ctx context.Context) (Import, bool, error) {
 	x, err := s.queryImport(ctx, `
 		UPDATE imports SET status = 'downloading', error = '', bytes_done = 0, bytes_total = NULL
-		WHERE id = (SELECT id FROM imports WHERE status = 'queued' ORDER BY id LIMIT 1)
+		WHERE id = (SELECT id FROM imports WHERE status = 'queued' ORDER BY seq LIMIT 1)
 		RETURNING `+importColumns)
 	if errors.Is(err, ErrNotFound) {
 		return Import{}, false, nil
@@ -123,13 +131,13 @@ func (s *Store) ResetDownloading(ctx context.Context) (int64, error) {
 }
 
 // UpdateImportProgress сохраняет прогресс скачивания; total = nil, если размер неизвестен.
-func (s *Store) UpdateImportProgress(ctx context.Context, id, done int64, total *int64) error {
+func (s *Store) UpdateImportProgress(ctx context.Context, id string, done int64, total *int64) error {
 	return s.execOne(ctx, "UPDATE imports SET bytes_done = ?, bytes_total = ? WHERE id = ?", done, total, id)
 }
 
 // FinishImport завершает загрузку: done без ошибки или failed с текстом. results — итог по картам.
 // ErrNotFound, если загрузку удалили во время скачивания.
-func (s *Store) FinishImport(ctx context.Context, id int64, errMsg string, results json.RawMessage) error {
+func (s *Store) FinishImport(ctx context.Context, id string, errMsg string, results json.RawMessage) error {
 	status := ImportDone
 	if errMsg != "" {
 		status = ImportFailed
@@ -143,7 +151,7 @@ func (s *Store) FinishImport(ctx context.Context, id int64, errMsg string, resul
 }
 
 // RetryImport ставит упавшую загрузку в очередь заново.
-func (s *Store) RetryImport(ctx context.Context, id int64) (Import, error) {
+func (s *Store) RetryImport(ctx context.Context, id string) (Import, error) {
 	x, err := s.queryImport(ctx, `
 		UPDATE imports SET status = 'queued', error = '', bytes_done = 0, bytes_total = NULL,
 			results = '[]', finished_at = NULL
@@ -159,7 +167,7 @@ func (s *Store) RetryImport(ctx context.Context, id int64) (Import, error) {
 }
 
 // DeleteImport удаляет загрузку; её матчи остаются, import_id у них обнуляется.
-func (s *Store) DeleteImport(ctx context.Context, id int64) (Import, error) {
+func (s *Store) DeleteImport(ctx context.Context, id string) (Import, error) {
 	return s.queryImport(ctx, "DELETE FROM imports WHERE id = ? RETURNING "+importColumns, id)
 }
 
@@ -170,12 +178,12 @@ type ImportSource struct {
 	Failed *Import // упавшая загрузка этого источника в этой сессии
 }
 
-func (s *Store) FindImportSource(ctx context.Context, sessionID int64, platform, externalID string, number int64) (ImportSource, error) {
+func (s *Store) FindImportSource(ctx context.Context, sessionID string, platform, externalID string, number int64) (ImportSource, error) {
 	var src ImportSource
 	x, err := s.queryImport(ctx, `
 		SELECT `+importColumns+` FROM imports
 		WHERE platform = ? AND external_id = ? AND status IN ('queued', 'downloading')
-		ORDER BY id LIMIT 1`, platform, externalID)
+		ORDER BY seq LIMIT 1`, platform, externalID)
 	switch {
 	case err == nil:
 		src.Active = &x
@@ -186,7 +194,8 @@ func (s *Store) FindImportSource(ctx context.Context, sessionID int64, platform,
 	m, err := scanMatch(s.db.QueryRowContext(ctx, `
 		SELECT `+matchColumns+` FROM matches
 		WHERE source_platform = ? AND source_number = ?
-		ORDER BY session_id = ? DESC, session_id, ordinal LIMIT 1`, platform, number, sessionID))
+		ORDER BY session_id = ? DESC, (SELECT seq FROM sessions WHERE sessions.id = matches.session_id), ordinal
+		LIMIT 1`, platform, number, sessionID))
 	switch {
 	case err == nil:
 		src.Match = &m
@@ -197,7 +206,7 @@ func (s *Store) FindImportSource(ctx context.Context, sessionID int64, platform,
 	f, err := s.queryImport(ctx, `
 		SELECT `+importColumns+` FROM imports
 		WHERE session_id = ? AND platform = ? AND external_id = ? AND status = 'failed'
-		ORDER BY id DESC LIMIT 1`, sessionID, platform, externalID)
+		ORDER BY seq DESC LIMIT 1`, sessionID, platform, externalID)
 	switch {
 	case err == nil:
 		src.Failed = &f
@@ -220,7 +229,7 @@ func (s *Store) execOne(ctx context.Context, q string, args ...any) error {
 }
 
 // ListImportMatches возвращает матчи, созданные загрузкой, по порядку в сессии.
-func (s *Store) ListImportMatches(ctx context.Context, importID int64) ([]Match, error) {
+func (s *Store) ListImportMatches(ctx context.Context, importID string) ([]Match, error) {
 	rows, err := s.db.QueryContext(ctx,
 		"SELECT "+matchColumns+" FROM matches WHERE import_id = ? ORDER BY ordinal", importID)
 	if err != nil {

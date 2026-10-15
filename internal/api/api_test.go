@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -25,6 +24,7 @@ type testEnv struct {
 	demos   *ingest.LocalStorage
 	woken   int
 	imports *fakeImports
+	gid     string // группа «Основная», которая есть в каждой новой базе
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -39,7 +39,11 @@ func newTestEnv(t *testing.T) *testEnv {
 	tmp := filepath.Join(dir, "tmp")
 	os.MkdirAll(tmp, 0o755)
 
-	e := &testEnv{store: st, demos: demos, imports: &fakeImports{}}
+	groups, err := st.ListGroups(context.Background())
+	if err != nil || len(groups) == 0 {
+		t.Fatalf("группы: %+v, %v", groups, err)
+	}
+	e := &testEnv{store: st, demos: demos, imports: &fakeImports{}, gid: groups[0].ID}
 	s := &Server{
 		Store:   st,
 		Ingest:  &ingest.Service{Store: st, Demos: demos, TmpDir: tmp, MaxSize: 1 << 20},
@@ -76,7 +80,7 @@ func TestSessions(t *testing.T) {
 	e := newTestEnv(t)
 
 	var sess store.Session
-	if code := e.do(t, "POST", "/api/groups/1/sessions", "application/json", nil, &sess); code != 201 {
+	if code := e.do(t, "POST", "/api/groups/"+e.gid+"/sessions", "application/json", nil, &sess); code != 201 {
 		t.Fatalf("создание без параметров: %d", code)
 	}
 	if sess.Date != "2026-10-09" || sess.Title != "" {
@@ -84,17 +88,17 @@ func TestSessions(t *testing.T) {
 	}
 
 	var errResp map[string]string
-	if code := e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{"date":"08.10.2026"}`), &errResp); code != 400 || errResp["error"] == "" {
+	if code := e.do(t, "POST", "/api/groups/"+e.gid+"/sessions", "application/json", []byte(`{"date":"08.10.2026"}`), &errResp); code != 400 || errResp["error"] == "" {
 		t.Errorf("неверная дата: %d %v", code, errResp)
 	}
 
-	e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{"date":"2026-10-10","title":" Микс "}`), &sess)
+	e.do(t, "POST", "/api/groups/"+e.gid+"/sessions", "application/json", []byte(`{"date":"2026-10-10","title":" Микс "}`), &sess)
 	if sess.Title != "Микс" {
 		t.Errorf("название не обрезано: %q", sess.Title)
 	}
 
 	var list []store.SessionSummary
-	if code := e.do(t, "GET", "/api/groups/1/sessions", "", nil, &list); code != 200 || len(list) != 2 || list[0].Date != "2026-10-10" {
+	if code := e.do(t, "GET", "/api/groups/"+e.gid+"/sessions", "", nil, &list); code != 200 || len(list) != 2 || list[0].Date != "2026-10-10" {
 		t.Errorf("список: %d %+v", code, list)
 	}
 
@@ -120,7 +124,7 @@ func multipartBody(t *testing.T, files map[string][]byte) (string, []byte) {
 func TestUploadAndViews(t *testing.T) {
 	e := newTestEnv(t)
 	var sess store.Session
-	e.do(t, "POST", "/api/groups/1/sessions", "application/json", []byte(`{}`), &sess)
+	e.do(t, "POST", "/api/groups/"+e.gid+"/sessions", "application/json", []byte(`{}`), &sess)
 
 	ct, body := multipartBody(t, map[string][]byte{"a.dem": []byte("HL2DEMO fake"), "notes.txt": []byte("x")})
 	var errResp map[string]string
@@ -129,7 +133,7 @@ func TestUploadAndViews(t *testing.T) {
 	}
 
 	var results []ingest.FileResult
-	if code := e.do(t, "POST", "/api/sessions/1/demos", ct, body, &results); code != 200 {
+	if code := e.do(t, "POST", "/api/sessions/"+sess.ID+"/demos", ct, body, &results); code != 200 {
 		t.Fatalf("загрузка: %d", code)
 	}
 	byName := map[string]ingest.FileResult{}
@@ -143,7 +147,7 @@ func TestUploadAndViews(t *testing.T) {
 		t.Errorf("воркер разбужен %d раз", e.woken)
 	}
 
-	if code := e.do(t, "POST", "/api/sessions/1/demos", "application/json", []byte(`{}`), &errResp); code != 400 {
+	if code := e.do(t, "POST", "/api/sessions/"+sess.ID+"/demos", "application/json", []byte(`{}`), &errResp); code != 400 {
 		t.Errorf("не multipart: %d", code)
 	}
 
@@ -161,7 +165,7 @@ func TestUploadAndViews(t *testing.T) {
 		Matches []store.Match `json:"matches"`
 		Players []PlayerView  `json:"players"`
 	}
-	if code := e.do(t, "GET", "/api/sessions/1", "", nil, &sr); code != 200 {
+	if code := e.do(t, "GET", "/api/sessions/"+sess.ID, "", nil, &sr); code != 200 {
 		t.Fatalf("сессия: %d", code)
 	}
 	if len(sr.Matches) != 1 || sr.Matches[0].Map != "de_nuke" || len(sr.Players) != 2 {
@@ -175,7 +179,7 @@ func TestUploadAndViews(t *testing.T) {
 		Match   store.Match  `json:"match"`
 		Players []PlayerView `json:"players"`
 	}
-	if code := e.do(t, "GET", "/api/matches/"+strconv.FormatInt(matchID, 10), "", nil, &mr); code != 200 || mr.Match.ScoreA != 13 || len(mr.Players) != 2 || mr.Players[0].Team != "A" {
+	if code := e.do(t, "GET", "/api/matches/"+matchID, "", nil, &mr); code != 200 || mr.Match.ScoreA != 13 || len(mr.Players) != 2 || mr.Players[0].Team != "A" {
 		t.Errorf("матч: %d %+v", code, mr)
 	}
 }

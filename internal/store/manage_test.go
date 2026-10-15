@@ -9,9 +9,9 @@ import (
 )
 
 // addMatches добавляет в сессию матчи с указанными sha и возвращает их id в том же порядке.
-func addMatches(t *testing.T, s *Store, sessionID int64, shas ...string) []int64 {
+func addMatches(t *testing.T, s *Store, sessionID string, shas ...string) []string {
 	t.Helper()
-	ids := make([]int64, 0, len(shas))
+	ids := make([]string, 0, len(shas))
 	for _, sha := range shas {
 		m, err := s.AddMatch(context.Background(), sessionID, sha, sha+".dem")
 		if err != nil {
@@ -23,7 +23,7 @@ func addMatches(t *testing.T, s *Store, sessionID int64, shas ...string) []int64
 }
 
 // order возвращает sha матчей сессии по порядку и проверяет, что номера идут 1..N.
-func order(t *testing.T, s *Store, sessionID int64) []string {
+func order(t *testing.T, s *Store, sessionID string) []string {
 	t.Helper()
 	list, err := s.ListSessionMatches(context.Background(), sessionID)
 	if err != nil {
@@ -63,8 +63,8 @@ func countRows(t *testing.T, s *Store, query string, args ...any) int {
 func TestUpdateSession(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	a, _ := s.CreateSession(ctx, 1, "2026-10-08", "Четверг")
-	b, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
+	a, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "Четверг")
+	b, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-09", "")
 
 	got, err := s.UpdateSession(ctx, a.ID, "2026-10-10", "Пятничный микс")
 	if err != nil {
@@ -73,11 +73,11 @@ func TestUpdateSession(t *testing.T) {
 	if got.Date != "2026-10-10" || got.Title != "Пятничный микс" || got.CreatedAt != a.CreatedAt {
 		t.Fatalf("неверный результат: %+v", got)
 	}
-	list, _ := s.ListSessions(ctx, 1)
+	list, _ := s.ListSessions(ctx, mainGroup(t, s))
 	if list[0].ID != a.ID || list[1].ID != b.ID {
 		t.Fatalf("список не пересортирован по новой дате: %+v", list)
 	}
-	if _, err := s.UpdateSession(ctx, 999, "2026-10-10", ""); !errors.Is(err, ErrNotFound) {
+	if _, err := s.UpdateSession(ctx, "none", "2026-10-10", ""); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("ожидался ErrNotFound, получено %v", err)
 	}
 }
@@ -85,13 +85,13 @@ func TestUpdateSession(t *testing.T) {
 func TestReorderMatches(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
-	other, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
+	other, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-09", "")
 	ids := addMatches(t, s, sess.ID, "A", "B", "C")
 	foreign := addMatches(t, s, other.ID, "D")
 
 	// сдвиг C вверх
-	list, err := s.ReorderMatches(ctx, sess.ID, []int64{ids[0], ids[2], ids[1]})
+	list, err := s.ReorderMatches(ctx, sess.ID, []string{ids[0], ids[2], ids[1]})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,20 +102,20 @@ func TestReorderMatches(t *testing.T) {
 		t.Fatalf("порядок %v", got)
 	}
 	// полный разворот: каждый матч меняет номер, UNIQUE не должен мешать
-	if _, err := s.ReorderMatches(ctx, sess.ID, []int64{ids[1], ids[2], ids[0]}); err != nil {
+	if _, err := s.ReorderMatches(ctx, sess.ID, []string{ids[1], ids[2], ids[0]}); err != nil {
 		t.Fatal(err)
 	}
 	if got := order(t, s, sess.ID); !equal(got, []string{"B", "C", "A"}) {
 		t.Fatalf("порядок %v", got)
 	}
 
-	bad := map[string][]int64{
+	bad := map[string][]string{
 		"неполный":    {ids[0], ids[1]},
 		"чужой":       {ids[0], ids[1], foreign[0]},
 		"повтор":      {ids[0], ids[0], ids[1]},
 		"лишний":      {ids[0], ids[1], ids[2], foreign[0]},
 		"пустой":      {},
-		"неизвестный": {ids[0], ids[1], 999},
+		"неизвестный": {ids[0], ids[1], "none"},
 	}
 	for name, list := range bad {
 		if _, err := s.ReorderMatches(ctx, sess.ID, list); !errors.Is(err, ErrOrderMismatch) {
@@ -128,7 +128,7 @@ func TestReorderMatches(t *testing.T) {
 	if got := order(t, s, other.ID); !equal(got, []string{"D"}) {
 		t.Fatalf("затронута другая сессия: %v", got)
 	}
-	if _, err := s.ReorderMatches(ctx, 999, nil); !errors.Is(err, ErrNotFound) {
+	if _, err := s.ReorderMatches(ctx, "none", nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("неизвестная сессия: ожидался ErrNotFound, получено %v", err)
 	}
 }
@@ -136,7 +136,7 @@ func TestReorderMatches(t *testing.T) {
 func TestDeleteMatch(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 	ids := addMatches(t, s, sess.ID, "A", "B", "C")
 	const alice = 76561198000000001
 	for i, id := range ids {
@@ -182,9 +182,9 @@ func TestDeleteMatch(t *testing.T) {
 func TestDeleteSession(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
-	other, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
-	empty, _ := s.CreateSession(ctx, 1, "2026-10-10", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
+	other, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-09", "")
+	empty, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-10", "")
 	ids := addMatches(t, s, sess.ID, "A", "B")
 	otherIDs := addMatches(t, s, other.ID, "C")
 	p := stats.PlayerStats{SteamID: 1, Name: "x", Team: "A", Result: stats.Win, Counters: stats.Counters{Rounds: 5}}
@@ -204,10 +204,10 @@ func TestDeleteSession(t *testing.T) {
 	}
 	for _, id := range ids {
 		if _, err := s.GetMatch(ctx, id); !errors.Is(err, ErrNotFound) {
-			t.Fatalf("матч %d не удалён: %v", id, err)
+			t.Fatalf("матч %s не удалён: %v", id, err)
 		}
 		if n := countRows(t, s, "SELECT count(*) FROM match_players WHERE match_id = ?", id); n != 0 {
-			t.Fatalf("статистика матча %d осталась", id)
+			t.Fatalf("статистика матча %s осталась", id)
 		}
 	}
 	if got := order(t, s, other.ID); !equal(got, []string{"C"}) {
@@ -221,7 +221,7 @@ func TestDeleteSession(t *testing.T) {
 	if err != nil || len(shas) != 0 {
 		t.Fatalf("пустая сессия: %v, %v", shas, err)
 	}
-	if _, err := s.DeleteSession(ctx, 999); !errors.Is(err, ErrNotFound) {
+	if _, err := s.DeleteSession(ctx, "none"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("ожидался ErrNotFound, получено %v", err)
 	}
 }

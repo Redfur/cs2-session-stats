@@ -12,13 +12,13 @@ func TestGroups(t *testing.T) {
 	ctx := context.Background()
 
 	g, err := s.CreateGroup(ctx, "Четверг")
-	if err != nil || g.ID == 0 || g.Name != "Четверг" || g.CreatedAt == "" {
+	if err != nil || g.ID == "" || g.Name != "Четверг" || g.CreatedAt == "" {
 		t.Fatalf("создание: %+v, %v", g, err)
 	}
-	s.CreateSession(ctx, 1, "2026-10-08", "")
-	s.CreateSession(ctx, 1, "2026-10-09", "")
+	s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
+	s.CreateSession(ctx, mainGroup(t, s), "2026-10-09", "")
 	list, err := s.ListGroups(ctx)
-	if err != nil || len(list) != 2 || list[0].ID != 1 || list[0].SessionCount != 2 || list[1].ID != g.ID || list[1].SessionCount != 0 {
+	if err != nil || len(list) != 2 || list[0].ID != mainGroup(t, s) || list[0].SessionCount != 2 || list[1].ID != g.ID || list[1].SessionCount != 0 {
 		t.Fatalf("список: %+v, %v", list, err)
 	}
 
@@ -30,7 +30,7 @@ func TestGroups(t *testing.T) {
 		t.Errorf("после переименования: %+v", got)
 	}
 
-	if err := s.DeleteGroup(ctx, 1); !errors.Is(err, ErrGroupNotEmpty) {
+	if err := s.DeleteGroup(ctx, mainGroup(t, s)); !errors.Is(err, ErrGroupNotEmpty) {
 		t.Errorf("удаление группы с сессиями: %v", err)
 	}
 	if err := s.DeleteGroup(ctx, g.ID); err != nil {
@@ -40,7 +40,7 @@ func TestGroups(t *testing.T) {
 		t.Errorf("удалённая группа: %v", err)
 	}
 
-	const unknown = 999
+	const unknown = "none"
 	if _, err := s.GetGroup(ctx, unknown); !errors.Is(err, ErrNotFound) {
 		t.Errorf("GetGroup неизвестной: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestGroups(t *testing.T) {
 func TestGroupSummary(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 	ids := addMatches(t, s, sess.ID, "a", "b", "pending")
 	// игроки 1 и 2 в обоих матчах — по одному разу
 	for _, id := range ids[:2] {
@@ -72,7 +72,7 @@ func TestGroupSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	x, err := s.GroupSummary(ctx, 1)
+	x, err := s.GroupSummary(ctx, mainGroup(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestSessionsByGroup(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
 	other, _ := s.CreateGroup(ctx, "Четверг")
-	main, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	main, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 	thu, err := s.CreateSession(ctx, other.ID, "2026-10-09", "четверг")
 	if err != nil || thu.GroupID != other.ID {
 		t.Fatalf("сессия группы: %+v, %v", thu, err)
@@ -99,11 +99,11 @@ func TestSessionsByGroup(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for gid, want := range map[int64]Session{1: main, other.ID: thu} {
+	for gid, want := range map[string]Session{mainGroup(t, s): main, other.ID: thu} {
 		list, err := s.ListSessions(ctx, gid)
 		if err != nil || len(list) != 1 || list[0].ID != want.ID || list[0].GroupID != gid || list[0].MatchCount != 1 ||
 			!reflect.DeepEqual(list[0].Maps, []string{"de_nuke"}) {
-			t.Errorf("сессии группы %d: %+v, %v", gid, list, err)
+			t.Errorf("сессии группы %s: %+v, %v", gid, list, err)
 		}
 	}
 	if got, _ := s.GetSession(ctx, thu.ID); got.GroupID != other.ID {
@@ -119,7 +119,7 @@ func TestPlayerDataByGroup(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
 	other, _ := s.CreateGroup(ctx, "Четверг")
-	main, _ := s.CreateSession(ctx, 1, "2026-10-01", "")
+	main, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-01", "")
 	thu, _ := s.CreateSession(ctx, other.ID, "2026-10-08", "")
 
 	r := extResult(1)
@@ -138,21 +138,21 @@ func TestPlayerDataByGroup(t *testing.T) {
 	}
 
 	// свои агрегаты и ник в каждой группе
-	for gid, want := range map[int64]struct {
+	for gid, want := range map[string]struct {
 		name   string
 		rounds int
-	}{1: {"alpha", 20}, other.ID: {"beta", 30}} {
+	}{mainGroup(t, s): {"alpha", 20}, other.ID: {"beta", 30}} {
 		list, err := s.PlayerTotals(ctx, MatchFilter{GroupID: gid, PlayerIDs: []uint64{1}}, 1)
 		if err != nil || len(list) != 1 || list[0].Matches != 1 || list[0].Rounds != want.rounds || list[0].Name != want.name {
-			t.Errorf("группа %d: %+v, %v", gid, list, err)
+			t.Errorf("группа %s: %+v, %v", gid, list, err)
 		}
 		if name, err := s.latestName(ctx, 1, gid); err != nil || name != want.name {
-			t.Errorf("latestName группы %d: %q, %v", gid, name, err)
+			t.Errorf("latestName группы %s: %q, %v", gid, name, err)
 		}
 	}
 
 	// сессия чужой группы в фильтре не даёт строк
-	if list, _ := s.PlayerTotals(ctx, MatchFilter{GroupID: other.ID, SessionIDs: []int64{main.ID}}, 1); len(list) != 0 {
+	if list, _ := s.PlayerTotals(ctx, MatchFilter{GroupID: other.ID, SessionIDs: []string{main.ID}}, 1); len(list) != 0 {
 		t.Errorf("сессия чужой группы: %+v", list)
 	}
 	for name, get := range map[string]func(MatchFilter) (int, error){
@@ -170,20 +170,20 @@ func TestPlayerDataByGroup(t *testing.T) {
 		if n, err := get(MatchFilter{GroupID: other.ID}); err != nil || n != 1 {
 			t.Errorf("%s группы: %d, %v", name, n, err)
 		}
-		if n, err := get(MatchFilter{GroupID: other.ID, SessionIDs: []int64{main.ID}}); err != nil || n != 0 {
+		if n, err := get(MatchFilter{GroupID: other.ID, SessionIDs: []string{main.ID}}); err != nil || n != 0 {
 			t.Errorf("%s с сессией чужой группы: %d, %v", name, n, err)
 		}
 	}
 
 	// OVR группы не видит матчи другой группы
-	for gid, want := range map[int64]int64{1: m1, other.ID: m2} {
+	for gid, want := range map[string]string{mainGroup(t, s): m1, other.ID: m2} {
 		rows, err := s.RatingRows(ctx, gid)
 		if err != nil || len(rows) != 2 || rows[0].MatchID != want {
-			t.Errorf("RatingRows группы %d: %+v, %v", gid, rows, err)
+			t.Errorf("RatingRows группы %s: %+v, %v", gid, rows, err)
 		}
 		swing, err := s.RatingSwing(ctx, gid)
 		if _, ok := swing[want]; err != nil || len(swing) != 1 || !ok {
-			t.Errorf("RatingSwing группы %d: %v, %v", gid, swing, err)
+			t.Errorf("RatingSwing группы %s: %v, %v", gid, swing, err)
 		}
 	}
 }
@@ -193,12 +193,12 @@ func TestSingleGroupUnchanged(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	all, _ := f.s.PlayerTotals(ctx, MatchFilter{}, 1)
-	byGroup, err := f.s.PlayerTotals(ctx, MatchFilter{GroupID: 1}, 1)
+	byGroup, err := f.s.PlayerTotals(ctx, MatchFilter{GroupID: mainGroup(t, f.s)}, 1)
 	if err != nil || !reflect.DeepEqual(all, byGroup) {
 		t.Errorf("PlayerTotals: %+v против %+v (%v)", byGroup, all, err)
 	}
-	rowsAll, _ := f.s.RatingRows(ctx, 0)
-	rowsGroup, err := f.s.RatingRows(ctx, 1)
+	rowsAll, _ := f.s.RatingRows(ctx, "")
+	rowsGroup, err := f.s.RatingRows(ctx, mainGroup(t, f.s))
 	if err != nil || !reflect.DeepEqual(rowsAll, rowsGroup) {
 		t.Errorf("RatingRows отличаются (%v)", err)
 	}

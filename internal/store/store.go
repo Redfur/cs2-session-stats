@@ -54,8 +54,26 @@ func Open(path string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+// migrationStep — Go-часть миграции: выполняется в той же транзакции до (Before) или после (After) SQL-файла.
+// Нужна там, где SQL не справляется сам, например для генерации случайных id.
+type migrationStep struct {
+	Before func(ctx context.Context, tx *sql.Tx) error
+	After  func(ctx context.Context, tx *sql.Tx) error
+}
+
+// migrationSteps — Go-шаги по номеру миграции.
+var migrationSteps = map[int]migrationStep{
+	8: {Before: stringIDsBefore, After: foreignKeyCheck},
+}
+
 // migrate применяет файлы migrations/NNN_*.sql с номером больше PRAGMA user_version.
 func (s *Store) migrate(ctx context.Context) error {
+	return s.migrateWith(ctx, migrationSteps)
+}
+
+// migrateWith применяет миграции с Go-шагами steps. Каждая миграция — одна транзакция:
+// ошибка шага или SQL откатывает её целиком, и user_version не меняется.
+func (s *Store) migrateWith(ctx context.Context, steps map[int]migrationStep) error {
 	entries, err := fs.ReadDir(migrationsFS, "migrations")
 	if err != nil {
 		return err
@@ -78,23 +96,36 @@ func (s *Store) migrate(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, string(body)); err != nil {
-			tx.Rollback()
+		if err := s.applyMigration(ctx, num, string(body), steps[num]); err != nil {
 			return fmt.Errorf("%s: %w", e.Name(), err)
-		}
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", num)); err != nil {
-			tx.Rollback()
-			return err
-		}
-		if err := tx.Commit(); err != nil {
-			return err
 		}
 	}
 	return nil
+}
+
+func (s *Store) applyMigration(ctx context.Context, num int, body string, step migrationStep) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if step.Before != nil {
+		if err := step.Before(ctx, tx); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, body); err != nil {
+		return err
+	}
+	if step.After != nil {
+		if err := step.After(ctx, tx); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", num)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) timestamp() string { return s.now().UTC().Format(time.RFC3339) }

@@ -9,13 +9,14 @@ import (
 	"os"
 
 	"cs2stats/internal/config"
+	"cs2stats/internal/ids"
 	"cs2stats/internal/store"
 )
 
 // reparseTarget — что ставить на пересчёт: ровно одно из полей.
 type reparseTarget struct {
-	match   int64
-	session int64
+	match   string
+	session string
 	all     bool
 }
 
@@ -23,8 +24,8 @@ func parseReparseArgs(args []string) (reparseTarget, error) {
 	var t reparseTarget
 	fs := flag.NewFlagSet("reparse", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	fs.Int64Var(&t.match, "match", 0, "")
-	fs.Int64Var(&t.session, "session", 0, "")
+	fs.StringVar(&t.match, "match", "", "")
+	fs.StringVar(&t.session, "session", "", "")
 	fs.BoolVar(&t.all, "all", false, "")
 	if err := fs.Parse(args); err != nil {
 		return t, err
@@ -37,10 +38,22 @@ func parseReparseArgs(args []string) (reparseTarget, error) {
 	if set != 1 {
 		return t, errors.New("укажите ровно один из параметров --match, --session или --all")
 	}
-	if (t.match < 0 || t.session < 0) || (!t.all && t.match == 0 && t.session == 0) {
-		return t, errors.New("идентификатор должен быть положительным числом")
+	switch {
+	case t.all:
+	case isSet(fs, "session"):
+		if !ids.Valid(ids.Session, t.session) {
+			return t, fmt.Errorf("неверный id сессии %q: ожидается вида s_Vf8nR2pQxa7c", t.session)
+		}
+	case !ids.Valid(ids.Match, t.match):
+		return t, fmt.Errorf("неверный id матча %q: ожидается вида m_Vf8nR2pQxa7c", t.match)
 	}
 	return t, nil
+}
+
+func isSet(fs *flag.FlagSet, name string) bool {
+	set := false
+	fs.Visit(func(f *flag.Flag) { set = set || f.Name == name })
+	return set
 }
 
 func reparseCmd(t reparseTarget) error {
@@ -70,15 +83,15 @@ func requeue(ctx context.Context, st *store.Store, t reparseTarget) (int64, erro
 	switch {
 	case t.all:
 		return st.RequeueAll(ctx)
-	case t.session != 0:
+	case t.session != "":
 		if _, err := st.GetSession(ctx, t.session); err != nil {
-			return 0, fmt.Errorf("сессия %d: %w", t.session, err)
+			return 0, fmt.Errorf("сессия %s: %w", t.session, err)
 		}
 		return st.RequeueSession(ctx, t.session)
 	default:
 		before, err := st.GetMatch(ctx, t.match)
 		if err != nil {
-			return 0, fmt.Errorf("матч %d: %w", t.match, err)
+			return 0, fmt.Errorf("матч %s: %w", t.match, err)
 		}
 		if before.Status == store.StatusPending || before.Status == store.StatusParsing {
 			return 0, nil // уже в очереди

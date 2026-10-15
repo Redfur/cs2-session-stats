@@ -71,7 +71,7 @@ type env struct {
 	im      *Importer
 	st      *store.Store
 	fake    *fakePlatform
-	session int64
+	session string
 	files   map[string]http.HandlerFunc // раздача демок по пути
 	srv     *httptest.Server
 	woken   atomic.Int32
@@ -88,7 +88,7 @@ func newEnv(t *testing.T, maxSize int64) *env {
 	demos, _ := ingest.NewLocalStorage(filepath.Join(dir, "demos"))
 	tmp := filepath.Join(dir, "tmp")
 	os.MkdirAll(tmp, 0o755)
-	sess, _ := st.CreateSession(context.Background(), 1, "2026-10-08", "Вечер")
+	sess, _ := st.CreateSession(context.Background(), firstGroup(t, st), "2026-10-08", "Вечер")
 
 	e := &env{st: st, fake: &fakePlatform{matches: map[string]Match{}, errs: map[string]error{}}, session: sess.ID, files: map[string]http.HandlerFunc{}}
 	e.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -141,7 +141,7 @@ func zipOf(t *testing.T, files map[string][]byte, order []string) []byte {
 }
 
 // add добавляет ссылку на fake-матч и возвращает id загрузки.
-func (e *env) add(t *testing.T, id string) int64 {
+func (e *env) add(t *testing.T, id string) string {
 	t.Helper()
 	res, err := e.im.Add(context.Background(), e.session, "https://fake.test/match/"+id)
 	if err != nil || res[0].Status != AddAccepted {
@@ -150,7 +150,7 @@ func (e *env) add(t *testing.T, id string) int64 {
 	return res[0].ImportID
 }
 
-func (e *env) importOf(t *testing.T, id int64) (store.Import, []ingest.FileResult) {
+func (e *env) importOf(t *testing.T, id string) (store.Import, []ingest.FileResult) {
 	t.Helper()
 	x, err := e.st.GetImport(context.Background(), id)
 	if err != nil {
@@ -448,16 +448,16 @@ func TestAddLinks(t *testing.T) {
 	if !reflect.DeepEqual(statuses, []string{AddAccepted, AddError, AddAccepted, AddError, AddAccepted}) {
 		t.Fatalf("статусы: %v (%+v)", statuses, res)
 	}
-	// загрузки созданы по времени игры: 1 раньше 2
-	if res[2].ImportID >= res[0].ImportID || res[4].ImportID != res[0].ImportID || res[4].URL != "https://fake.test/match/2" {
-		t.Fatalf("очередь: %+v", res)
+	if res[4].ImportID != res[0].ImportID || res[4].URL != "https://fake.test/match/2" {
+		t.Fatalf("повтор ссылки: %+v", res)
 	}
 	if !strings.HasPrefix(res[3].Error, "Матч ещё не закончен") || !strings.HasPrefix(res[1].Error, "Поддерживаются ссылки") {
 		t.Fatalf("ошибки: %+v", res)
 	}
 	list, _ := e.st.ListSessionImports(ctx, e.session)
-	if len(list) != 2 {
-		t.Fatalf("загрузок %d, ожидалось 2", len(list))
+	// загрузки созданы по времени игры: 1 раньше 2
+	if len(list) != 2 || list[0].ID != res[2].ImportID || list[1].ID != res[0].ImportID {
+		t.Fatalf("очередь: %+v, ответ %+v", list, res)
 	}
 
 	// уже скачивается: без обращения к платформе
@@ -470,7 +470,7 @@ func TestAddLinks(t *testing.T) {
 	// уже есть матч: ordinal и без обращения к платформе
 	e.st.AddMatchFrom(ctx, e.session, "sha", "a.dem", &store.MatchSource{Platform: "fake", Number: 7, Map: 1, PlayedAt: at(19, 0)})
 	res, _ = e.im.Add(ctx, e.session, "https://fake.test/match/7")
-	if res[0].Status != AddExists || res[0].Ordinal != 1 || res[0].MatchID == 0 || e.fake.calls.Load() != calls {
+	if res[0].Status != AddExists || res[0].Ordinal != 1 || res[0].MatchID == "" || e.fake.calls.Load() != calls {
 		t.Fatalf("уже есть: %+v", res)
 	}
 
@@ -530,4 +530,14 @@ func TestResolveErrorInBackground(t *testing.T) {
 	if x.Status != store.ImportFailed || !strings.HasPrefix(x.Error, "FastCup удалил демку") || string(x.Results) != "[]" {
 		t.Fatalf("%+v results=%s", x, x.Results)
 	}
+}
+
+// firstGroup — id группы «Основная», которая есть в каждой новой базе.
+func firstGroup(t *testing.T, st *store.Store) string {
+	t.Helper()
+	list, err := st.ListGroups(context.Background())
+	if err != nil || len(list) == 0 {
+		t.Fatalf("группы: %+v, %v", list, err)
+	}
+	return list[0].ID
 }

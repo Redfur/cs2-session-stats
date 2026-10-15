@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"cs2stats/internal/ids"
 	"cs2stats/internal/stats"
 )
 
@@ -20,8 +21,8 @@ const (
 )
 
 type Match struct {
-	ID           int64       `json:"id"`
-	SessionID    int64       `json:"sessionId"`
+	ID           string      `json:"id"`
+	SessionID    string      `json:"sessionId"`
 	Ordinal      int         `json:"ordinal"`
 	SHA256       string      `json:"sha256"`
 	OriginalName string      `json:"originalName"`
@@ -55,7 +56,7 @@ type MatchResult struct {
 type DuplicateError struct{ Existing Match }
 
 func (e *DuplicateError) Error() string {
-	return fmt.Sprintf("демка уже загружена: матч %d в сессии %d", e.Existing.ID, e.Existing.SessionID)
+	return fmt.Sprintf("демка уже загружена: матч %s в сессии %s", e.Existing.ID, e.Existing.SessionID)
 }
 
 const matchColumns = `id, session_id, ordinal, sha256, original_name, status, error, map, rounds,
@@ -76,7 +77,7 @@ func scanMatch(row scanner) (Match, error) {
 
 // MatchSource — откуда матч: загрузка по ссылке, матч платформы и время начала его карты.
 type MatchSource struct {
-	ImportID *int64
+	ImportID *string
 	Platform string
 	Number   int64     // номер матча на платформе
 	Map      int       // номер карты в серии, с 1
@@ -88,7 +89,7 @@ const playedAtLayout = "2006-01-02T15:04:05Z"
 
 // AddMatch добавляет матч из файла в конец сессии в статусе pending.
 // Если демка с таким sha256 уже есть, возвращает *DuplicateError.
-func (s *Store) AddMatch(ctx context.Context, sessionID int64, sha256, originalName string) (Match, error) {
+func (s *Store) AddMatch(ctx context.Context, sessionID string, sha256, originalName string) (Match, error) {
 	return s.AddMatchFrom(ctx, sessionID, sha256, originalName, nil)
 }
 
@@ -96,7 +97,7 @@ func (s *Store) AddMatch(ctx context.Context, sessionID int64, sha256, originalN
 // Матч из ссылки встаёт перед первым матчем сессии с более поздним известным временем игры
 // (при равном времени — по номеру матча платформы и карты), а если такого нет — в конец;
 // номера следующих матчей сдвигаются. Матчи без времени в выборе места не участвуют.
-func (s *Store) AddMatchFrom(ctx context.Context, sessionID int64, sha256, originalName string, src *MatchSource) (Match, error) {
+func (s *Store) AddMatchFrom(ctx context.Context, sessionID string, sha256, originalName string, src *MatchSource) (Match, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Match{}, err
@@ -137,14 +138,19 @@ func (s *Store) AddMatchFrom(ctx context.Context, sessionID int64, sha256, origi
 		}
 	}
 
-	m, err := scanMatch(tx.QueryRowContext(ctx, `
-		INSERT INTO matches (session_id, ordinal, sha256, original_name, status, created_at,
-			import_id, source_platform, source_number, map_number, played_at)
-		VALUES (?, coalesce(?, (SELECT coalesce(max(ordinal), 0) + 1 FROM matches WHERE session_id = ?)),
-			?, ?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING `+matchColumns,
-		sessionID, pos, sessionID, sha256, originalName, StatusPending, s.timestamp(),
-		importID, platform, number, mapNumber, playedAt))
+	var m Match
+	err = insertWithNewID(ids.Match, "matches.id", func(id string) error {
+		var err error
+		m, err = scanMatch(tx.QueryRowContext(ctx, `
+			INSERT INTO matches (id, seq, session_id, ordinal, sha256, original_name, status, created_at,
+				import_id, source_platform, source_number, map_number, played_at)
+			VALUES (?, `+nextSeq("matches")+`, ?, coalesce(?, (SELECT coalesce(max(ordinal), 0) + 1 FROM matches WHERE session_id = ?)),
+				?, ?, ?, ?, ?, ?, ?, ?, ?)
+			RETURNING `+matchColumns,
+			id, sessionID, pos, sessionID, sha256, originalName, StatusPending, s.timestamp(),
+			importID, platform, number, mapNumber, playedAt))
+		return err
+	})
 	if err != nil {
 		return Match{}, err
 	}
@@ -159,7 +165,7 @@ func (s *Store) FindMatchBySHA(ctx context.Context, sha256 string) (Match, error
 	return m, err
 }
 
-func (s *Store) GetMatch(ctx context.Context, id int64) (Match, error) {
+func (s *Store) GetMatch(ctx context.Context, id string) (Match, error) {
 	m, err := scanMatch(s.db.QueryRowContext(ctx, "SELECT "+matchColumns+" FROM matches WHERE id = ?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Match{}, ErrNotFound
@@ -168,7 +174,7 @@ func (s *Store) GetMatch(ctx context.Context, id int64) (Match, error) {
 }
 
 // ListSessionMatches возвращает матчи сессии по порядку.
-func (s *Store) ListSessionMatches(ctx context.Context, sessionID int64) ([]Match, error) {
+func (s *Store) ListSessionMatches(ctx context.Context, sessionID string) ([]Match, error) {
 	rows, err := s.db.QueryContext(ctx,
 		"SELECT "+matchColumns+" FROM matches WHERE session_id = ? ORDER BY ordinal", sessionID)
 	if err != nil {
@@ -192,7 +198,7 @@ func (s *Store) ListSessionMatches(ctx context.Context, sessionID int64) ([]Matc
 func (s *Store) ClaimNextPending(ctx context.Context) (m Match, ok bool, err error) {
 	m, err = scanMatch(s.db.QueryRowContext(ctx, `
 		UPDATE matches SET status = ?
-		WHERE id = (SELECT id FROM matches WHERE status = ? ORDER BY has_result, id LIMIT 1)
+		WHERE id = (SELECT id FROM matches WHERE status = ? ORDER BY has_result, seq LIMIT 1)
 		RETURNING `+matchColumns, StatusParsing, StatusPending))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Match{}, false, nil
@@ -211,7 +217,7 @@ func (s *Store) ResetParsing(ctx context.Context) (int64, error) {
 
 // SaveMatchResult атомарно заменяет результат матча, полученный версией обработки version, и переводит матч в done.
 // Если матч удалён во время обработки, возвращает ErrNotFound и ничего не сохраняет.
-func (s *Store) SaveMatchResult(ctx context.Context, matchID int64, r MatchResult, version int) error {
+func (s *Store) SaveMatchResult(ctx context.Context, matchID string, r MatchResult, version int) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -261,7 +267,7 @@ func (s *Store) SaveMatchResult(ctx context.Context, matchID int64, r MatchResul
 
 // FailMatch переводит матч в failed с текстом ошибки. Прежний результат матча
 // (игроки, счёт, has_result) не трогается.
-func (s *Store) FailMatch(ctx context.Context, matchID int64, msg string, version int) error {
+func (s *Store) FailMatch(ctx context.Context, matchID string, msg string, version int) error {
 	_, err := s.db.ExecContext(ctx,
 		"UPDATE matches SET status = ?, error = ?, parsed_at = ?, processed_version = ? WHERE id = ?",
 		StatusFailed, msg, s.timestamp(), version, matchID)
@@ -281,7 +287,7 @@ func scanPlayer(row scanner) (stats.PlayerStats, error) {
 }
 
 // MatchPlayers возвращает статистику игроков матча.
-func (s *Store) MatchPlayers(ctx context.Context, matchID int64) ([]stats.PlayerStats, error) {
+func (s *Store) MatchPlayers(ctx context.Context, matchID string) ([]stats.PlayerStats, error) {
 	rows, err := s.db.QueryContext(ctx,
 		"SELECT "+playerColumns+" FROM match_players WHERE match_id = ?", matchID)
 	if err != nil {
@@ -301,7 +307,7 @@ func (s *Store) MatchPlayers(ctx context.Context, matchID int64) ([]stats.Player
 
 // DeleteMatch удаляет матч вместе со статистикой и перенумеровывает оставшиеся матчи сессии.
 // Возвращает удалённый матч: файл его демки удаляет вызывающий код после коммита.
-func (s *Store) DeleteMatch(ctx context.Context, id int64) (Match, error) {
+func (s *Store) DeleteMatch(ctx context.Context, id string) (Match, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Match{}, err
@@ -327,7 +333,7 @@ func (s *Store) DeleteMatch(ctx context.Context, id int64) (Match, error) {
 
 // ReorderMatches задаёт новый порядок матчей сессии. ids — все матчи сессии в новом порядке,
 // иначе ErrOrderMismatch. Неизвестная сессия — ErrNotFound.
-func (s *Store) ReorderMatches(ctx context.Context, sessionID int64, ids []int64) ([]Match, error) {
+func (s *Store) ReorderMatches(ctx context.Context, sessionID string, ids []string) ([]Match, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -349,7 +355,7 @@ func (s *Store) ReorderMatches(ctx context.Context, sessionID int64, ids []int64
 	if len(ids) != len(current) {
 		return nil, ErrOrderMismatch
 	}
-	known := make(map[int64]bool, len(current))
+	known := make(map[string]bool, len(current))
 	for _, id := range current {
 		known[id] = true
 	}
@@ -368,15 +374,15 @@ func (s *Store) ReorderMatches(ctx context.Context, sessionID int64, ids []int64
 	return s.ListSessionMatches(ctx, sessionID)
 }
 
-func sessionMatchIDs(ctx context.Context, tx *sql.Tx, sessionID int64) ([]int64, error) {
+func sessionMatchIDs(ctx context.Context, tx *sql.Tx, sessionID string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, "SELECT id FROM matches WHERE session_id = ? ORDER BY ordinal", sessionID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	ids := []int64{}
+	ids := []string{}
 	for rows.Next() {
-		var id int64
+		var id string
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
@@ -387,7 +393,7 @@ func sessionMatchIDs(ctx context.Context, tx *sql.Tx, sessionID int64) ([]int64,
 
 // renumber нумерует матчи сессии 1..N в порядке ids. Сначала номера уходят в отрицательные,
 // иначе промежуточное состояние нарушает UNIQUE (session_id, ordinal).
-func renumber(ctx context.Context, tx *sql.Tx, sessionID int64, ids []int64) error {
+func renumber(ctx context.Context, tx *sql.Tx, sessionID string, ids []string) error {
 	if _, err := tx.ExecContext(ctx, "UPDATE matches SET ordinal = -ordinal WHERE session_id = ?", sessionID); err != nil {
 		return err
 	}

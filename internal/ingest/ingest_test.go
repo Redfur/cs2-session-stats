@@ -32,7 +32,7 @@ type env struct {
 	svc     *Service
 	store   *store.Store
 	demos   *LocalStorage
-	session int64
+	session string
 }
 
 func newEnv(t *testing.T, maxSize int64) env {
@@ -46,7 +46,7 @@ func newEnv(t *testing.T, maxSize int64) env {
 	demos, _ := NewLocalStorage(filepath.Join(dir, "demos"))
 	tmp := filepath.Join(dir, "tmp")
 	os.MkdirAll(tmp, 0o755)
-	sess, _ := st.CreateSession(context.Background(), 1, "2026-10-08", "")
+	sess, _ := st.CreateSession(context.Background(), firstGroup(t, st), "2026-10-08", "")
 	return env{svc: &Service{Store: st, Demos: demos, TmpDir: tmp, MaxSize: maxSize}, store: st, demos: demos, session: sess.ID}
 }
 
@@ -108,7 +108,7 @@ func TestFormats(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t, 1<<20)
 			res := e.ingest(name, data)
-			if res.Status != Accepted || res.MatchID == 0 {
+			if res.Status != Accepted || res.MatchID == "" {
 				t.Fatalf("результат: %+v", res)
 			}
 			m, _ := e.store.GetMatch(context.Background(), res.MatchID)
@@ -167,10 +167,10 @@ func TestDuplicate(t *testing.T) {
 	}
 
 	// та же демка в архиве и в другой сессии
-	other, _ := e.store.CreateSession(context.Background(), 1, "2026-10-09", "")
+	other, _ := e.store.CreateSession(context.Background(), firstGroup(t, e.store), "2026-10-09", "")
 	res := e.svc.Ingest(context.Background(), other.ID, "match.dem.gz", bytes.NewReader(gz(t, sampleDemo)))
 	if res.Status != Duplicate || res.MatchID != first.MatchID || res.SessionID != e.session {
-		t.Fatalf("ожидался duplicate со ссылкой на матч %d, получено %+v", first.MatchID, res)
+		t.Fatalf("ожидался duplicate со ссылкой на матч %s, получено %+v", first.MatchID, res)
 	}
 	matches, _ := e.store.ListSessionMatches(context.Background(), other.ID)
 	if len(matches) != 0 {
@@ -254,4 +254,14 @@ func TestIngestImport(t *testing.T) {
 		t.Fatalf("источник матча: %+v %v", found, err)
 	}
 	e.assertTmpEmpty(t)
+}
+
+// firstGroup — id группы «Основная», которая есть в каждой новой базе.
+func firstGroup(t *testing.T, st *store.Store) string {
+	t.Helper()
+	list, err := st.ListGroups(context.Background())
+	if err != nil || len(list) == 0 {
+		t.Fatalf("группы: %+v, %v", list, err)
+	}
+	return list[0].ID
 }

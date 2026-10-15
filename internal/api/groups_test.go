@@ -18,7 +18,7 @@ func TestGroupsAPI(t *testing.T) {
 	}
 
 	var g store.Group
-	if code := e.do(t, "POST", "/api/groups", "application/json", []byte(`{"name":"  Четверг "}`), &g); code != 201 || g.Name != "Четверг" || g.ID == 0 {
+	if code := e.do(t, "POST", "/api/groups", "application/json", []byte(`{"name":"  Четверг "}`), &g); code != 201 || g.Name != "Четверг" || g.ID == "" {
 		t.Fatalf("создание: %d %+v", code, g)
 	}
 	var errResp map[string]string
@@ -32,7 +32,7 @@ func TestGroupsAPI(t *testing.T) {
 		t.Errorf("название из 100 символов: %d", code)
 	}
 
-	path := fmt.Sprintf("/api/groups/%d", g.ID)
+	path := fmt.Sprintf("/api/groups/%s", g.ID)
 	if code := e.do(t, "PATCH", path, "application/json", []byte(`{"name":"Пятница"}`), &g); code != 200 || g.Name != "Пятница" {
 		t.Errorf("переименование: %d %+v", code, g)
 	}
@@ -52,12 +52,12 @@ func TestGroupsAPI(t *testing.T) {
 	if code := e.do(t, "DELETE", path, "", nil, &errResp); code != 409 || errResp["error"] != "в группе есть сессии — сначала удалите их" {
 		t.Errorf("удаление группы с сессиями: %d %v", code, errResp)
 	}
-	if code := e.do(t, "DELETE", fmt.Sprintf("/api/groups/%d", long.ID), "", nil, nil); code != 204 {
+	if code := e.do(t, "DELETE", fmt.Sprintf("/api/groups/%s", long.ID), "", nil, nil); code != 204 {
 		t.Errorf("удаление пустой: %d", code)
 	}
 
 	for _, req := range [][2]string{
-		{"GET", fmt.Sprintf("/api/groups/%d", long.ID)}, {"GET", "/api/groups/abc"},
+		{"GET", fmt.Sprintf("/api/groups/%s", long.ID)}, {"GET", "/api/groups/abc"},
 		{"PATCH", "/api/groups/999"}, {"DELETE", "/api/groups/999"},
 		{"GET", "/api/groups/999/sessions"}, {"POST", "/api/groups/999/sessions"},
 		{"GET", "/api/groups/999/players"}, {"GET", fmt.Sprintf("/api/groups/999/players/%d", steamA)},
@@ -73,18 +73,18 @@ func TestSessionsByGroupAPI(t *testing.T) {
 	e := newTestEnv(t)
 	g, _ := e.store.CreateGroup(context.Background(), "Четверг")
 	var sess store.Session
-	if code := e.do(t, "POST", fmt.Sprintf("/api/groups/%d/sessions", g.ID), "application/json", []byte(`{"date":"2026-10-08"}`), &sess); code != 201 || sess.GroupID != g.ID {
+	if code := e.do(t, "POST", fmt.Sprintf("/api/groups/%s/sessions", g.ID), "application/json", []byte(`{"date":"2026-10-08"}`), &sess); code != 201 || sess.GroupID != g.ID {
 		t.Fatalf("создание в группе: %d %+v", code, sess)
 	}
 	var list []sessionSummaryView
-	if e.do(t, "GET", "/api/groups/1/sessions", "", nil, &list); len(list) != 0 {
+	if e.do(t, "GET", "/api/groups/"+e.gid+"/sessions", "", nil, &list); len(list) != 0 {
 		t.Errorf("сессии «Основной»: %+v", list)
 	}
-	if e.do(t, "GET", fmt.Sprintf("/api/groups/%d/sessions", g.ID), "", nil, &list); len(list) != 1 || list[0].ID != sess.ID || list[0].GroupID != g.ID {
+	if e.do(t, "GET", fmt.Sprintf("/api/groups/%s/sessions", g.ID), "", nil, &list); len(list) != 1 || list[0].ID != sess.ID || list[0].GroupID != g.ID {
 		t.Errorf("сессии группы: %+v", list)
 	}
 	var sr sessionResponse
-	if e.do(t, "GET", fmt.Sprintf("/api/sessions/%d", sess.ID), "", nil, &sr); sr.Session.GroupID != g.ID {
+	if e.do(t, "GET", fmt.Sprintf("/api/sessions/%s", sess.ID), "", nil, &sr); sr.Session.GroupID != g.ID {
 		t.Errorf("groupId сессии: %+v", sr.Session)
 	}
 }
@@ -94,7 +94,7 @@ func TestRatingByGroupAPI(t *testing.T) {
 	e := newTestEnv(t)
 	ctx := context.Background()
 	g, _ := e.store.CreateGroup(ctx, "Четверг")
-	main, _ := e.store.CreateSession(ctx, 1, "2026-10-01", "")
+	main, _ := e.store.CreateSession(ctx, e.gid, "2026-10-01", "")
 	thu, _ := e.store.CreateSession(ctx, g.ID, "2026-10-08", "")
 	ps := []ratingPlayer{{steamA, "A", 1.2}, {3, "A", 1}, {steamB, "B", 0.9}, {4, "B", 1}}
 	addRatedMatch(t, e, main, ps...)
@@ -103,14 +103,14 @@ func TestRatingByGroupAPI(t *testing.T) {
 
 	// перед матчем «Четверга» у игроков нет OVR в этой группе
 	var m matchResponse
-	e.do(t, http.MethodGet, fmt.Sprintf("/api/matches/%d", id), "", nil, &m)
+	e.do(t, http.MethodGet, fmt.Sprintf("/api/matches/%s", id), "", nil, &m)
 	if m.GroupID != g.ID || m.Teams.A != nil || m.Teams.B != nil || byID(m.Players, steamA).Before != nil {
-		t.Errorf("матч группы «Четверг»: groupId %d, команды %+v", m.GroupID, m.Teams)
+		t.Errorf("матч группы «Четверг»: groupId %s, команды %+v", m.GroupID, m.Teams)
 	}
 
 	var main1, thu1 playersResponse
-	e.do(t, http.MethodGet, "/api/groups/1/players", "", nil, &main1)
-	e.do(t, http.MethodGet, fmt.Sprintf("/api/groups/%d/players", g.ID), "", nil, &thu1)
+	e.do(t, http.MethodGet, "/api/groups/"+e.gid+"/players", "", nil, &main1)
+	e.do(t, http.MethodGet, fmt.Sprintf("/api/groups/%s/players", g.ID), "", nil, &thu1)
 	a1, a2 := byID(main1.Players, steamA), byID(thu1.Players, steamA)
 	if a1.Matches != 2 || a2.Matches != 1 || a1.OVR == nil || a2.OVR == nil || a1.OVR.Matches != 2 || a2.OVR.Matches != 1 {
 		t.Errorf("игрок в двух группах: %+v / %+v", a1, a2)
@@ -120,13 +120,13 @@ func TestRatingByGroupAPI(t *testing.T) {
 	other, _ := e.store.CreateGroup(ctx, "Пусто")
 	var errResp map[string]string
 	for _, tab := range []string{"", "/duels", "/fight", "/weapons", "/utility"} {
-		path := fmt.Sprintf("/api/groups/%d/players/%d%s", other.ID, steamA, tab)
+		path := fmt.Sprintf("/api/groups/%s/players/%d%s", other.ID, steamA, tab)
 		if code := e.do(t, http.MethodGet, path, "", nil, &errResp); code != 404 || errResp["error"] != "игрок не найден" {
 			t.Errorf("%s: %d %v", path, code, errResp)
 		}
 	}
 	var prof profileResponse
-	if code := e.do(t, http.MethodGet, fmt.Sprintf("/api/groups/%d/players/%d", g.ID, steamA), "", nil, &prof); code != 200 ||
+	if code := e.do(t, http.MethodGet, fmt.Sprintf("/api/groups/%s/players/%d", g.ID, steamA), "", nil, &prof); code != 200 ||
 		len(prof.Matches) != 1 || prof.OVR == nil || prof.OVR.Matches != 1 {
 		t.Errorf("профиль в «Четверге»: %d %+v", code, prof.OVR)
 	}

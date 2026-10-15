@@ -29,7 +29,7 @@ make build    # бинарь ./cs2stats со встроенным фронтом
 make web      # сборка фронта в internal/webui/dist
 cd web && npm run lint                                      # oxlint
 go run ./cmd/cs2stats parse path/to/match.dem               # разбор демки в JSON без сервиса
-go run ./cmd/cs2stats reparse --all|--session ID|--match ID # поставить матчи на пересчёт
+go run ./cmd/cs2stats reparse --all|--session s_…|--match m_… # поставить матчи на пересчёт
 docker compose up -d --build                                # сервис на :8080, данные в ./data
 docker compose exec cs2stats /cs2stats reparse --all        # CLI внутри контейнера
 openspec validate <change> --strict
@@ -53,7 +53,9 @@ internal/rating    OVR игроков: Build(матчи в порядке игр
 internal/ingest    приём файла: формат, распаковка gz/bz2/zst/zip, лимит, sha256, дедуп; Storage (LocalStorage)
 internal/importer  импорт по ссылке: Platform (FastCup, Cybershoke), проверка ссылок (Add), фоновое скачивание (Run), архивы серий
 internal/worker    очередь матчей; ProcessingVersion; пересчёт устаревших при старте
-internal/store     SQLite: groups, sessions, matches, match_players, imports; миграции migrations/NNN_*.sql через PRAGMA user_version
+internal/ids       id объектов: New(kind) — префикс g_/s_/m_/imp_ + 12 символов base62 из crypto/rand, Valid(kind, s)
+internal/store     SQLite: groups, sessions, matches, match_players, imports; миграции migrations/NNN_*.sql через PRAGMA user_version,
+                   Go-шаги миграций (migrationSteps) — в той же транзакции до/после SQL
 internal/api       JSON API на net/http ServeMux; PlayerView для вывода. Группы и всё «по группе» — /api/groups/{gid}/sessions|players…;
                    сессии, матчи и загрузки — по своему id (/api/sessions/{id}, /api/matches/{id}, /api/imports/{id})
 internal/webui     раздача SPA: embed при -tags embedweb, иначе с диска (STATIC_DIR)
@@ -76,7 +78,8 @@ web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI 
 
 ## Ключевые решения и инварианты
 
-- **Статистика и рейтинг — по группе.** Сессия принадлежит одной группе (`sessions.group_id`, миграция 007; в схеме NULL допустим из-за ограничения `ADD COLUMN … REFERENCES`, `NOT NULL` обеспечивает `CreateSession`). Таблица игроков, профиль и его вкладки, дуэли профиля и OVR считаются по матчам группы: `MatchFilter.GroupID`, `RatingRows`/`RatingSwing(groupID)`, `api.ratingBook(ctx, groupID)`; для сессии и матча группа берётся из сессии. Группа удаляется только без сессий (`ErrGroupNotEmpty`, 409). Дедупликация демок и ссылок остаётся глобальной. Владельцев и прав у групп пока нет.
+- **Id объектов — строки** (миграция 008): группа `g_…`, сессия `s_…`, матч `m_…`, загрузка `imp_…`, 12 случайных символов base62 (`internal/ids`). Это первичные ключи в БД; целых id у этих объектов нет, наружу (API, адреса, CLI) числа не отдаются и не принимаются. Новый id выдаёт `insertWithNewID` (повтор при совпадении ключа). Порядок — только по внутренней колонке `seq` (номер вставки, у старых строк — прежний id): очереди, списки, тай-брейк сессий одной даты. `seq` не сериализуется и не принимается API; сортировать по `id` нельзя — он случайный. API разбирает id из пути через `pathKey`/`sessionKey`/`matchKey`/`importKey`: неверный формат — 404 с тем же текстом, что у отсутствующего объекта, без запроса к базе. Тест-страж `TestNoNumericIDsInResponses` ловит числовые `id`/`*Id` в ответах — новый GET-эндпоинт добавлять в него.
+- **Статистика и рейтинг — по группе.** Сессия принадлежит одной группе (`sessions.group_id`, `NOT NULL` с миграции 008). Таблица игроков, профиль и его вкладки, дуэли профиля и OVR считаются по матчам группы: `MatchFilter.GroupID`, `RatingRows`/`RatingSwing(groupID)`, `api.ratingBook(ctx, groupID)`; для сессии и матча группа берётся из сессии. Группа удаляется только без сессий (`ErrGroupNotEmpty`, 409). Дедупликация демок и ссылок остаётся глобальной. Владельцев и прав у групп пока нет.
 - **Сессию создаёт пользователь** (дата + название). В демках CS2 нет даты матча, поэтому группировать по времени нельзя. Порядок матчей (`ordinal`) — порядок загрузки файлов, а матчи из ссылок встают по времени игры у платформы.
 - **В БД хранятся только сырые счётчики** (`stats.Counters`). ADR, KAST%, HS%, K/D и rating считаются при чтении. Агрегаты сессии — суммы счётчиков, поэтому они автоматически взвешены по раундам. Rating — восстановленный HLTV Rating 2.0 (`Counters.Rating`), 1.0 остался как `Counters.Rating1` для сравнения.
 - **`worker.ProcessingVersion`.** Поднимать при любом изменении `internal/parser`/`internal/stats`, которое меняет сохраняемые счётчики: при старте сервис сам пересчитает старые матчи. Для изменения формул производных показателей поднимать не нужно.
@@ -84,7 +87,7 @@ web/               Vite + React + TS + react-router + Tailwind v4 + Headless UI 
 - **Round Swing** считается при чтении в `internal/rating` из `match_rounds` (`equip_a`/`equip_b` — снаряжение команд на конец freeze time, `plant_ms` — установка бомбы, миграция 006) и `match_kills`. Данные есть у матчей с `result_version >= store.SwingSinceVersion` (4); у остальных значение матча для OVR — Rating 2.0. Константы модели шанса меняются без пересчёта демок.
 - **Личные дуэли** хранятся в `match_duels` (все пары соперников, включая нули) и пишутся в той же транзакции, что результат. `matches.result_version` — версия, которой получен сохранённый результат (в отличие от `processed_version`, не меняется при ошибке). Дуэли матча посчитаны, если `has_result = 1 AND result_version >= store.DuelsSinceVersion`. Пары считаются тем же правилом `enemyKill`, что и K.
 - **Статус и наличие результата разделены.** `status` (`pending`/`parsing`/`done`/`failed`) описывает обработку, `has_result` — есть ли данные. При пересчёте и его ошибке прежний результат сохраняется и показывается: `FailMatch` не трогает `match_players`. Итоги сессии строятся по `has_result = 1`.
-- **Очередь** — таблица `matches`. `ClaimNextPending` идёт в порядке `has_result, id`, так что новые загрузки обрабатываются раньше пересчётов. При остановке сервиса матч остаётся `parsing`, при старте `ResetParsing` возвращает его в очередь, а не помечает `failed`.
+- **Очередь** — таблица `matches`. `ClaimNextPending` идёт в порядке `has_result, seq`, так что новые загрузки обрабатываются раньше пересчётов. При остановке сервиса матч остаётся `parsing`, при старте `ResetParsing` возвращает его в очередь, а не помечает `failed`.
 - **Команды A/B:** A — команда, начавшая матч за CT. После смены сторон её сторона определяется по большинству её игроков. Счёт считается по победителям раундов. На `TeamState` не опираемся.
 - **SteamID64 в JSON — строка**: в JavaScript number он теряет точность.
 - **Ссылки фронта — только через `paths` из `src/groups.ts`**, чтобы не выпасть из группы. Компоненты `ui/` адрес не собирают, а получают пропсом (`playerHref`, `matchHref`). Ссылка на дубликат из загрузки ведёт на `/matches/:id` без группы (`paths.anyMatch`): матч может быть в другой группе, страница сама перейдёт на адрес своей группы.

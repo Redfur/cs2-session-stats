@@ -22,7 +22,7 @@ func duelResult(kills int) MatchResult {
 func TestSaveMatchResultDuels(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 	id := addMatches(t, s, sess.ID, "x")[0]
 
 	killsOf := func() (n, rows int) {

@@ -7,10 +7,10 @@ import (
 )
 
 // setupStatuses создаёт матчи в заданных состояниях: done (v1), failed (v1), parsing, pending и done (v2).
-func setupStatuses(t *testing.T, s *Store, sessionID int64) map[string]int64 {
+func setupStatuses(t *testing.T, s *Store, sessionID string) map[string]string {
 	t.Helper()
 	ctx := context.Background()
-	ids := map[string]int64{}
+	ids := map[string]string{}
 	for _, sha := range []string{"done-v1", "failed-v1", "parsing", "pending", "done-v2"} {
 		m, err := s.AddMatch(ctx, sessionID, sha, sha+".dem")
 		if err != nil {
@@ -30,7 +30,7 @@ func setupStatuses(t *testing.T, s *Store, sessionID int64) map[string]int64 {
 	return ids
 }
 
-func statusOf(t *testing.T, s *Store, id int64) MatchStatus {
+func statusOf(t *testing.T, s *Store, id string) MatchStatus {
 	t.Helper()
 	m, err := s.GetMatch(context.Background(), id)
 	if err != nil {
@@ -42,7 +42,7 @@ func statusOf(t *testing.T, s *Store, id int64) MatchStatus {
 func TestRequeueOutdated(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 	ids := setupStatuses(t, s, sess.ID)
 
 	// версия не менялась: ничего не ставится, включая упавшие
@@ -68,8 +68,8 @@ func TestRequeueOutdated(t *testing.T) {
 func TestRequeueManual(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
-	other, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
+	other, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-09", "")
 	ids := setupStatuses(t, s, sess.ID)
 	foreign, _ := s.AddMatch(ctx, other.ID, "foreign", "f.dem")
 	s.db.Exec("UPDATE matches SET status='done', has_result=1, processed_version=1 WHERE id=?", foreign.ID)
@@ -84,7 +84,7 @@ func TestRequeueManual(t *testing.T) {
 	if m, err := s.RequeueMatch(ctx, ids["parsing"]); err != nil || m.Status != StatusParsing {
 		t.Fatalf("parsing: %+v err=%v", m, err)
 	}
-	if _, err := s.RequeueMatch(ctx, 999); !errors.Is(err, ErrNotFound) {
+	if _, err := s.RequeueMatch(ctx, "none"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("неизвестный матч: %v", err)
 	}
 

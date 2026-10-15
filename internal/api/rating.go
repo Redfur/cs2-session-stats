@@ -12,7 +12,7 @@ const last20Matches = 20
 
 // ratingBook считает историю OVR игроков группы по её матчам с результатом.
 // Расчёт идёт на каждый запрос: матчей сотни, а перестановка и пересчёт сразу видны.
-func (s *Server) ratingBook(ctx context.Context, groupID int64) (*rating.Book, error) {
+func (s *Server) ratingBook(ctx context.Context, groupID string) (*rating.Book, error) {
 	rows, err := s.Store.RatingRows(ctx, groupID)
 	if err != nil {
 		return nil, err
@@ -58,14 +58,14 @@ func playerOVR(b *rating.Book, steamID uint64) *OVRView {
 // SessionChangeView — OVR игрока до и после сессии и оценка за неё. Разницы считаются
 // по округлённым баллам, чтобы «65 → 67, +2» сходилось с показанными числами.
 type SessionChangeView struct {
-	SessionID   int64 `json:"sessionId"`
-	Score       int   `json:"score"`             // оценка за сессию
-	Before      *int  `json:"before,omitempty"`  // нет — сессия у игрока первая
-	After       int   `json:"after"`             // OVR после последнего матча в сессии
-	Delta       *int  `json:"delta,omitempty"`   // after − before
-	VsUsual     *int  `json:"vsUsual,omitempty"` // score − before
-	Matches     int   `json:"matches"`           // матчей игрока после сессии
-	Calibrating bool  `json:"calibrating"`       // OVR после сессии ещё в калибровке
+	SessionID   string `json:"sessionId"`
+	Score       int    `json:"score"`             // оценка за сессию
+	Before      *int   `json:"before,omitempty"`  // нет — сессия у игрока первая
+	After       int    `json:"after"`             // OVR после последнего матча в сессии
+	Delta       *int   `json:"delta,omitempty"`   // after − before
+	VsUsual     *int   `json:"vsUsual,omitempty"` // score − before
+	Matches     int    `json:"matches"`           // матчей игрока после сессии
+	Calibrating bool   `json:"calibrating"`       // OVR после сессии ещё в калибровке
 	// порог калибровки — для счётчика «8/10»
 	CalibrationMatches int `json:"calibrationMatches"`
 }
@@ -90,7 +90,7 @@ func sessionChangeView(b *rating.Book, ch rating.SessionChange) *SessionChangeVi
 
 // setMatchRating записывает в строку матча оценку за матч, OVR игрока перед матчем и разницу
 // оценки с ним; ok = false, если перед матчем OVR не было (первый матч игрока).
-func setMatchRating(p *PlayerView, b *rating.Book, steamID uint64, matchID int64) (before rating.State, ok bool) {
+func setMatchRating(p *PlayerView, b *rating.Book, steamID uint64, matchID string) (before rating.State, ok bool) {
 	if st, found := b.Match(steamID, matchID); found {
 		score := stats.ScorePoints(st.Value)
 		p.Score = &score
@@ -109,7 +109,7 @@ func setMatchRating(p *PlayerView, b *rating.Book, steamID uint64, matchID int64
 }
 
 // setSessionRating записывает в строку итогов сессии оценку за сессию и изменение OVR.
-func setSessionRating(p *PlayerView, b *rating.Book, steamID uint64, sessionID int64) {
+func setSessionRating(p *PlayerView, b *rating.Book, steamID uint64, sessionID string) {
 	ch, ok := b.Session(steamID, sessionID)
 	if !ok {
 		return
@@ -134,7 +134,7 @@ type teamsOVRView struct {
 // withMatchRating дополняет строки scoreboard OVR перед матчем и сравнением с ним
 // и считает средний OVR команд. Среднее берётся по R̄, а в баллы переводится потом:
 // шкала нелинейна.
-func withMatchRating(b *rating.Book, matchID int64, players []PlayerView, ids []uint64) teamsOVRView {
+func withMatchRating(b *rating.Book, matchID string, players []PlayerView, ids []uint64) teamsOVRView {
 	type acc struct {
 		sum          float64
 		rated, total int

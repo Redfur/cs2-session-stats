@@ -9,11 +9,11 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"cs2stats/internal/ids"
 	"cs2stats/internal/ingest"
 	"cs2stats/internal/rating"
 	"cs2stats/internal/stats"
@@ -174,7 +174,7 @@ func (req *createSessionRequest) normalize() string {
 // updateSession меняет дату и название. В отличие от создания, дата обязательна:
 // подставлять «сегодня» при правке было бы неожиданно.
 func (s *Server) updateSession(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := sessionKey(w, r)
 	if !ok {
 		return
 	}
@@ -196,7 +196,7 @@ func (s *Server) updateSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := sessionKey(w, r)
 	if !ok {
 		return
 	}
@@ -213,7 +213,7 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteMatch(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := matchKey(w, r)
 	if !ok {
 		return
 	}
@@ -238,11 +238,11 @@ func (s *Server) removeDemos(r *http.Request, shas []string) {
 }
 
 type reorderRequest struct {
-	MatchIDs []int64 `json:"matchIds"`
+	MatchIDs []string `json:"matchIds"`
 }
 
 func (s *Server) reorderMatches(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := sessionKey(w, r)
 	if !ok {
 		return
 	}
@@ -271,7 +271,7 @@ type sessionResponse struct {
 }
 
 func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := sessionKey(w, r)
 	if !ok {
 		return
 	}
@@ -308,7 +308,7 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) uploadDemos(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := sessionKey(w, r)
 	if !ok {
 		return
 	}
@@ -354,14 +354,14 @@ func (s *Server) uploadDemos(w http.ResponseWriter, r *http.Request) {
 }
 
 type matchResponse struct {
-	GroupID int64        `json:"groupId"` // группа сессии матча
+	GroupID string       `json:"groupId"` // группа сессии матча
 	Match   store.Match  `json:"match"`
 	Players []PlayerView `json:"players"`
 	Teams   teamsOVRView `json:"teams"` // средний OVR команд перед матчем
 }
 
 func (s *Server) getMatch(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := matchKey(w, r)
 	if !ok {
 		return
 	}
@@ -410,7 +410,7 @@ func sortScoreboard(ps []stats.PlayerStats) []PlayerView {
 }
 
 func (s *Server) reparseMatch(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := matchKey(w, r)
 	if !ok {
 		return
 	}
@@ -424,7 +424,7 @@ func (s *Server) reparseMatch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) reparseSession(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := sessionKey(w, r)
 	if !ok {
 		return
 	}
@@ -456,13 +456,28 @@ func (s *Server) now() time.Time {
 	return time.Now()
 }
 
-func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		writeError(w, http.StatusNotFound, "не найдено")
-		return 0, false
+// pathKey разбирает {name} как id типа kind. Id другого формата (числовой, с префиксом другого
+// типа) отвечает 404 с тем же текстом, что у отсутствующего объекта, без запроса к базе.
+// ok=false — ответ уже записан.
+func pathKey(w http.ResponseWriter, r *http.Request, name string, kind ids.Kind, notFound string) (string, bool) {
+	id := r.PathValue(name)
+	if !ids.Valid(kind, id) {
+		writeError(w, http.StatusNotFound, notFound)
+		return "", false
 	}
 	return id, true
+}
+
+func sessionKey(w http.ResponseWriter, r *http.Request) (string, bool) {
+	return pathKey(w, r, "id", ids.Session, "сессия не найдена")
+}
+
+func matchKey(w http.ResponseWriter, r *http.Request) (string, bool) {
+	return pathKey(w, r, "id", ids.Match, "матч не найден")
+}
+
+func importKey(w http.ResponseWriter, r *http.Request) (string, bool) {
+	return pathKey(w, r, "id", ids.Import, "загрузка не найдена")
 }
 
 func (s *Server) storeError(w http.ResponseWriter, err error, notFoundMsg string) {

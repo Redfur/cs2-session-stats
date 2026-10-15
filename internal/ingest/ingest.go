@@ -33,8 +33,8 @@ const (
 type FileResult struct {
 	FileName  string `json:"fileName"`
 	Status    Status `json:"status"`
-	MatchID   int64  `json:"matchId,omitempty"`
-	SessionID int64  `json:"sessionId,omitempty"`
+	MatchID   string `json:"matchId,omitempty"`
+	SessionID string `json:"sessionId,omitempty"`
 	Error     string `json:"error,omitempty"`
 }
 
@@ -85,17 +85,17 @@ type Service struct {
 
 // Ingest принимает один файл в сессию. Ошибки по файлу возвращаются в FileResult,
 // чтобы остальные файлы загрузки обрабатывались независимо.
-func (s *Service) Ingest(ctx context.Context, sessionID int64, name string, r io.Reader) FileResult {
+func (s *Service) Ingest(ctx context.Context, sessionID string, name string, r io.Reader) FileResult {
 	return s.ingest(ctx, sessionID, name, r, nil)
 }
 
 // IngestImport принимает демку, скачанную по ссылке на матч: матч запоминает источник
 // и встаёт в сессии по времени игры (store.AddMatchFrom).
-func (s *Service) IngestImport(ctx context.Context, sessionID int64, name string, r io.Reader, src *store.MatchSource) FileResult {
+func (s *Service) IngestImport(ctx context.Context, sessionID string, name string, r io.Reader, src *store.MatchSource) FileResult {
 	return s.ingest(ctx, sessionID, name, r, src)
 }
 
-func (s *Service) ingest(ctx context.Context, sessionID int64, name string, r io.Reader, src *store.MatchSource) FileResult {
+func (s *Service) ingest(ctx context.Context, sessionID string, name string, r io.Reader, src *store.MatchSource) FileResult {
 	res := FileResult{FileName: name}
 	fail := func(err error) FileResult {
 		res.Status, res.Error = Failed, err.Error()

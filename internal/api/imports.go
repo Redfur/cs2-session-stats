@@ -12,10 +12,10 @@ import (
 
 // Imports — проверка ссылок на матчи и фоновое скачивание демок (importer.Importer).
 type Imports interface {
-	Add(ctx context.Context, sessionID int64, text string) ([]importer.AddResult, error)
+	Add(ctx context.Context, sessionID string, text string) ([]importer.AddResult, error)
 	Wake()
-	Cancel(importID int64)
-	CancelSession(sessionID int64)
+	Cancel(importID string)
+	CancelSession(sessionID string)
 }
 
 type addImportsRequest struct {
@@ -24,7 +24,7 @@ type addImportsRequest struct {
 
 // addImports — POST /api/sessions/{id}/imports: проверить ссылки и поставить матчи в очередь скачивания.
 func (s *Server) addImports(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := sessionKey(w, r)
 	if !ok {
 		return
 	}
@@ -60,7 +60,7 @@ func (s *Server) addImports(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) retryImport(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := importKey(w, r)
 	if !ok {
 		return
 	}
@@ -81,7 +81,7 @@ func (s *Server) retryImport(w http.ResponseWriter, r *http.Request) {
 
 // deleteImport убирает загрузку из списка и прерывает её скачивание; созданные матчи остаются.
 func (s *Server) deleteImport(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := importKey(w, r)
 	if !ok {
 		return
 	}

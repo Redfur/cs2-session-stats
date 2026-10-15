@@ -4,25 +4,24 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"cs2stats/internal/ids"
 	"cs2stats/internal/store"
 )
 
 const maxGroupNameLen = 100
 
 // groupFromPath разбирает {gid} и проверяет, что группа существует. ok=false — ответ уже записан.
-func (s *Server) groupFromPath(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	gid, err := strconv.ParseInt(r.PathValue("gid"), 10, 64)
-	if err != nil || gid <= 0 {
-		writeError(w, http.StatusNotFound, "группа не найдена")
-		return 0, false
+func (s *Server) groupFromPath(w http.ResponseWriter, r *http.Request) (string, bool) {
+	gid, ok := pathKey(w, r, "gid", ids.Group, "группа не найдена")
+	if !ok {
+		return "", false
 	}
 	if _, err := s.Store.GetGroup(r.Context(), gid); err != nil {
 		s.storeError(w, err, "группа не найдена")
-		return 0, false
+		return "", false
 	}
 	return gid, true
 }

@@ -42,7 +42,7 @@ func fakeParse(r io.Reader) (parser.Match, error) {
 	}, nil
 }
 
-func waitStatus(t *testing.T, st *store.Store, id int64, want store.MatchStatus) store.Match {
+func waitStatus(t *testing.T, st *store.Store, id string, want store.MatchStatus) store.Match {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
@@ -55,7 +55,7 @@ func waitStatus(t *testing.T, st *store.Store, id int64, want store.MatchStatus)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("матч %d не перешёл в %s", id, want)
+	t.Fatalf("матч %s не перешёл в %s", id, want)
 	return store.Match{}
 }
 
@@ -66,7 +66,7 @@ func TestWorker(t *testing.T) {
 	}
 	defer st.Close()
 	ctx := context.Background()
-	sess, _ := st.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := st.CreateSession(ctx, firstGroup(t, st), "2026-10-08", "")
 
 	// матч «застрял» в parsing из-за перезапуска
 	stuck, _ := st.AddMatch(ctx, sess.ID, "ok-1", "1.dem")
@@ -116,7 +116,7 @@ func TestShutdownDuringParse(t *testing.T) {
 	}
 	defer st.Close()
 	ctx := context.Background()
-	sess, _ := st.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := st.CreateSession(ctx, firstGroup(t, st), "2026-10-08", "")
 	m, _ := st.AddMatch(ctx, sess.ID, "slow", "slow.dem")
 
 	started, release := make(chan struct{}), make(chan struct{})
@@ -170,11 +170,11 @@ func runWorker(t *testing.T, st *store.Store) *Worker {
 func TestRequeueOutdatedOnStart(t *testing.T) {
 	st := openStore(t)
 	ctx := context.Background()
-	sess, _ := st.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := st.CreateSession(ctx, firstGroup(t, st), "2026-10-08", "")
 	old, _ := st.AddMatch(ctx, sess.ID, "ok-old", "old.dem")
 	cur, _ := st.AddMatch(ctx, sess.ID, "ok-cur", "cur.dem")
 	for _, x := range []struct {
-		id      int64
+		id      string
 		version int
 	}{{old.ID, ProcessingVersion - 1}, {cur.ID, ProcessingVersion}} {
 		st.ClaimNextPending(ctx)
@@ -205,7 +205,7 @@ func TestRequeueOutdatedOnStart(t *testing.T) {
 func TestMissingDemoKeepsResult(t *testing.T) {
 	st := openStore(t)
 	ctx := context.Background()
-	sess, _ := st.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := st.CreateSession(ctx, firstGroup(t, st), "2026-10-08", "")
 	m, _ := st.AddMatch(ctx, sess.ID, "missing", "m.dem")
 	st.ClaimNextPending(ctx)
 	players := []stats.PlayerStats{{SteamID: 1, Name: "a", Team: "A", Result: stats.Win, Counters: stats.Counters{Rounds: 5, Kills: 4}}}
@@ -232,7 +232,7 @@ func TestMatchDeletedDuringProcessing(t *testing.T) {
 	}
 	defer st.Close()
 	ctx := context.Background()
-	sess, _ := st.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := st.CreateSession(ctx, firstGroup(t, st), "2026-10-08", "")
 	deleted, _ := st.AddMatch(ctx, sess.ID, "block", "1.dem")
 	next, _ := st.AddMatch(ctx, sess.ID, "ok-2", "2.dem")
 
@@ -285,4 +285,14 @@ func TestProcessingVersionHasDuels(t *testing.T) {
 	if ProcessingVersion < store.SwingSinceVersion {
 		t.Fatalf("ProcessingVersion %d ниже store.SwingSinceVersion %d", ProcessingVersion, store.SwingSinceVersion)
 	}
+}
+
+// firstGroup — id группы «Основная», которая есть в каждой новой базе.
+func firstGroup(t *testing.T, st *store.Store) string {
+	t.Helper()
+	list, err := st.ListGroups(context.Background())
+	if err != nil || len(list) == 0 {
+		t.Fatalf("группы: %+v, %v", list, err)
+	}
+	return list[0].ID
 }

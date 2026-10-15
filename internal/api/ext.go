@@ -19,8 +19,8 @@ const (
 )
 
 type missingMatch struct {
-	ID        int64  `json:"id"`
-	SessionID int64  `json:"sessionId"`
+	ID        string `json:"id"`
+	SessionID string `json:"sessionId"`
 	Ordinal   int    `json:"ordinal"`
 	Map       string `json:"map"`
 	Reason    string `json:"reason"`
@@ -104,8 +104,8 @@ func sumExt(rows []store.ExtRow) (c stats.ExtCounters, kills, deaths, assists in
 }
 
 type matchRef struct {
-	ID        int64  `json:"id"`
-	SessionID int64  `json:"sessionId"`
+	ID        string `json:"id"`
+	SessionID string `json:"sessionId"`
 	Ordinal   int    `json:"ordinal"`
 	Error     string `json:"error,omitempty"`
 }
@@ -542,7 +542,7 @@ type sessionExtResponse struct {
 }
 
 func (s *Server) getSessionExt(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := sessionKey(w, r)
 	if !ok {
 		return
 	}
@@ -561,7 +561,7 @@ func (s *Server) getSessionExt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// заголовок — по матчам, а не по строкам игроков
-	seen := map[int64]bool{}
+	seen := map[string]bool{}
 	var matches []store.ExtRow
 	for _, row := range rows {
 		if !seen[row.MatchID] {
@@ -623,7 +623,7 @@ type matchExtResponse struct {
 }
 
 func (s *Server) getMatchExt(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r)
+	id, ok := matchKey(w, r)
 	if !ok {
 		return
 	}

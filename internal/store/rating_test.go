@@ -9,13 +9,13 @@ import (
 )
 
 // matchOrder — порядок матчей в RatingRows (каждый матч один раз).
-func matchOrder(t *testing.T, s *Store) []int64 {
+func matchOrder(t *testing.T, s *Store) []string {
 	t.Helper()
-	rows, err := s.RatingRows(context.Background(), 1)
+	rows, err := s.RatingRows(context.Background(), mainGroup(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ids []int64
+	var ids []string
 	for _, r := range rows {
 		if len(ids) == 0 || ids[len(ids)-1] != r.MatchID {
 			ids = append(ids, r.MatchID)
@@ -31,7 +31,7 @@ func TestRatingRows(t *testing.T) {
 	if got := matchOrder(t, f.s); !equalIDs(got, f.matches) {
 		t.Fatalf("порядок матчей %v, ожидалось %v", got, f.matches)
 	}
-	rows, _ := f.s.RatingRows(ctx, 1)
+	rows, _ := f.s.RatingRows(ctx, mainGroup(t, f.s))
 	if len(rows) != 9 || rows[0].SteamID != pA || rows[0].Team != "A" || rows[0].Rounds != 10 || rows[0].Kills != 1 {
 		t.Fatalf("строки: %d, первая %+v", len(rows), rows[0])
 	}
@@ -47,10 +47,10 @@ func TestRatingRows(t *testing.T) {
 	}
 
 	// перестановка матчей сессии меняет порядок
-	if _, err := f.s.ReorderMatches(ctx, f.s2.ID, []int64{f.matches[2], f.matches[1]}); err != nil {
+	if _, err := f.s.ReorderMatches(ctx, f.s2.ID, []string{f.matches[2], f.matches[1]}); err != nil {
 		t.Fatal(err)
 	}
-	want := []int64{f.matches[0], f.matches[2], f.matches[1], f.matches[3], f.matches[4], f.matches[5]}
+	want := []string{f.matches[0], f.matches[2], f.matches[1], f.matches[3], f.matches[4], f.matches[5]}
 	if got := matchOrder(t, f.s); !equalIDs(got, want) {
 		t.Fatalf("после перестановки %v, ожидалось %v", got, want)
 	}
@@ -60,19 +60,19 @@ func TestRatingRowsSameDate(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
 	// вторая сессия той же даты создана позже, а её матч загружен раньше
-	first, _ := s.CreateSession(ctx, 1, "2026-10-08", "первая")
-	second, _ := s.CreateSession(ctx, 1, "2026-10-08", "вторая")
+	first, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "первая")
+	second, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "вторая")
 	b := addMatches(t, s, second.ID, "B")
 	a := addMatches(t, s, first.ID, "A")
-	for _, id := range []int64{a[0], b[0]} {
+	for _, id := range []string{a[0], b[0]} {
 		saveResult(t, s, id)
 	}
-	if got := matchOrder(t, s); !equalIDs(got, []int64{a[0], b[0]}) {
+	if got := matchOrder(t, s); !equalIDs(got, []string{a[0], b[0]}) {
 		t.Fatalf("порядок %v: сначала матч первой созданной сессии", got)
 	}
 }
 
-func equalIDs(a, b []int64) bool {
+func equalIDs(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -85,7 +85,7 @@ func equalIDs(a, b []int64) bool {
 }
 
 // saveResult сохраняет результат матча с одним игроком.
-func saveResult(t *testing.T, s *Store, matchID int64) {
+func saveResult(t *testing.T, s *Store, matchID string) {
 	t.Helper()
 	r := MatchResult{Map: "de_dust2", Rounds: 10, ScoreA: 13, ScoreB: 5,
 		Players: []stats.PlayerStats{{SteamID: pA, Name: "a", Team: "A", Result: stats.Win, Counters: stats.Counters{Rounds: 10}}}}
@@ -97,7 +97,7 @@ func saveResult(t *testing.T, s *Store, matchID int64) {
 func TestRatingSwing(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 	ids := addMatches(t, s, sess.ID, "old", "new")
 	if err := s.SaveMatchResult(ctx, ids[0], extResult(1), SwingSinceVersion-1); err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestRatingSwing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := s.RatingSwing(ctx, 1)
+	got, err := s.RatingSwing(ctx, mainGroup(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}

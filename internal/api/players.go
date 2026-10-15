@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"cs2stats/internal/ids"
 	"cs2stats/internal/stats"
 	"cs2stats/internal/store"
 )
@@ -25,11 +26,10 @@ func parsePeriod(q url.Values) (store.MatchFilter, error) {
 		}
 	}
 	for _, v := range q["session"] {
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || id <= 0 {
+		if !ids.Valid(ids.Session, v) {
 			return f, errors.New("некорректный идентификатор сессии: " + v)
 		}
-		f.SessionIDs = append(f.SessionIDs, id)
+		f.SessionIDs = append(f.SessionIDs, v)
 	}
 	if (f.From != "" || f.To != "") && len(f.SessionIDs) > 0 {
 		return f, errors.New("укажите период либо датами, либо сессиями")
@@ -153,8 +153,8 @@ type profileMap struct {
 }
 
 type profileMatch struct {
-	MatchID      int64  `json:"matchId"`
-	SessionID    int64  `json:"sessionId"`
+	MatchID      string `json:"matchId"`
+	SessionID    string `json:"sessionId"`
 	SessionDate  string `json:"sessionDate"`
 	SessionTitle string `json:"sessionTitle"`
 	Ordinal      int    `json:"ordinal"`

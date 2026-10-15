@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"cs2stats/internal/ids"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -18,6 +20,16 @@ func openTest(t *testing.T) *Store {
 	return s
 }
 
+// mainGroup возвращает id группы «Основная», которая есть в каждой новой базе.
+func mainGroup(t *testing.T, s *Store) string {
+	t.Helper()
+	list, err := s.ListGroups(t.Context())
+	if err != nil || len(list) == 0 {
+		t.Fatalf("группа «Основная»: %+v, %v", list, err)
+	}
+	return list[0].ID
+}
+
 func TestMigrationsIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "test.db")
 	for i := 0; i < 2; i++ {
@@ -29,8 +41,8 @@ func TestMigrationsIdempotent(t *testing.T) {
 		if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 			t.Fatal(err)
 		}
-		if version != 7 {
-			t.Fatalf("user_version = %d, ожидалось 7", version)
+		if version != 8 {
+			t.Fatalf("user_version = %d, ожидалось 8", version)
 		}
 		for _, table := range []string{"groups", "sessions", "matches", "match_players", "match_duels", "imports",
 			"match_player_ext", "match_player_weapons", "match_rounds", "match_kills", "match_clutches"} {
@@ -214,14 +226,14 @@ func TestMigration007Backfill(t *testing.T) {
 	}
 	defer s.Close()
 	var withoutGroup int
-	if err := s.db.QueryRow("SELECT count(*) FROM sessions WHERE group_id IS NOT 1").Scan(&withoutGroup); err != nil {
+	if err := s.db.QueryRow("SELECT count(*) FROM sessions WHERE group_id IS NOT (SELECT id FROM groups WHERE seq = 1)").Scan(&withoutGroup); err != nil {
 		t.Fatal(err)
 	}
 	if withoutGroup != 0 {
-		t.Errorf("сессий не в группе 1: %d", withoutGroup)
+		t.Errorf("сессий не в группе «Основная»: %d", withoutGroup)
 	}
 	groups, err := s.ListGroups(t.Context())
-	if err != nil || len(groups) != 1 || groups[0].ID != 1 || groups[0].Name != "Основная" || groups[0].SessionCount != 2 {
+	if err != nil || len(groups) != 1 || !ids.Valid(ids.Group, groups[0].ID) || groups[0].Name != "Основная" || groups[0].SessionCount != 2 {
 		t.Fatalf("группы после миграции: %+v, %v", groups, err)
 	}
 }

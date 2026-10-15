@@ -17,8 +17,8 @@ const (
 
 type fixture struct {
 	s          *Store
-	s1, s2, s3 Session // 2026-09-20, 2026-10-01, 2026-10-08
-	matches    []int64 // id матчей m1..m6 по порядку создания
+	s1, s2, s3 Session  // 2026-09-20, 2026-10-01, 2026-10-08
+	matches    []string // id матчей m1..m6 по порядку создания
 }
 
 // newFixture: A сыграл 5 матчей, B — 3 (2 из них вместе с A), гость — 1.
@@ -30,9 +30,9 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	ctx := context.Background()
 	f := &fixture{s: openTest(t)}
-	f.s1, _ = f.s.CreateSession(ctx, 1, "2026-09-20", "")
-	f.s2, _ = f.s.CreateSession(ctx, 1, "2026-10-01", "")
-	f.s3, _ = f.s.CreateSession(ctx, 1, "2026-10-08", "четверг")
+	f.s1, _ = f.s.CreateSession(ctx, mainGroup(t, f.s), "2026-09-20", "")
+	f.s2, _ = f.s.CreateSession(ctx, mainGroup(t, f.s), "2026-10-01", "")
+	f.s3, _ = f.s.CreateSession(ctx, mainGroup(t, f.s), "2026-10-08", "четверг")
 	type pl struct {
 		id   uint64
 		name string
@@ -95,7 +95,7 @@ func TestPlayerTotalsFilters(t *testing.T) {
 		{"диапазон дат", MatchFilter{From: "2026-10-01", To: "2026-10-08"}, 1, map[uint64]int{pA: 4, pB: 3}},
 		{"только нижняя граница", MatchFilter{From: "2026-10-08"}, 1, map[uint64]int{pA: 2, pB: 2}},
 		{"только верхняя граница", MatchFilter{To: "2026-09-20"}, 1, map[uint64]int{pA: 1, pG: 1}},
-		{"несколько сессий", MatchFilter{SessionIDs: []int64{f.s1.ID, f.s3.ID}}, 1, map[uint64]int{pA: 3, pB: 2, pG: 1}},
+		{"несколько сессий", MatchFilter{SessionIDs: []string{f.s1.ID, f.s3.ID}}, 1, map[uint64]int{pA: 3, pB: 2, pG: 1}},
 		{"выбраны игроки", MatchFilter{PlayerIDs: []uint64{pA, pB}}, 1, map[uint64]int{pA: 5, pB: 3}},
 		{"совместные матчи", MatchFilter{PlayerIDs: []uint64{pA, pB}, Together: true}, 1, map[uint64]int{pA: 2, pB: 2}},
 		{"совместные без игроков", MatchFilter{Together: true}, 1, map[uint64]int{pA: 5, pB: 3, pG: 1}},
@@ -142,12 +142,12 @@ func TestPlayerTotalsName(t *testing.T) {
 	if n := name(MatchFilter{From: "2026-10-01", To: "2026-10-01"}); n != "alpha" {
 		t.Errorf("за 2026-10-01: %q", n)
 	}
-	if n := name(MatchFilter{SessionIDs: []int64{f.s1.ID}}); n != "a_old" {
+	if n := name(MatchFilter{SessionIDs: []string{f.s1.ID}}); n != "a_old" {
 		t.Errorf("за первую сессию: %q", n)
 	}
 
 	// при равной дате последней считается сессия, созданная позже, даже если её матч загружен раньше
-	later, _ := f.s.CreateSession(ctx, 1, "2026-10-08", "")
+	later, _ := f.s.CreateSession(ctx, mainGroup(t, f.s), "2026-10-08", "")
 	m, _ := f.s.AddMatch(ctx, later.ID, "late", "m.dem")
 	f.s.SaveMatchResult(ctx, m.ID, MatchResult{Rounds: 1, Players: []stats.PlayerStats{{SteamID: pA, Name: "gamma"}}}, 1)
 	if n := name(MatchFilter{}); n != "gamma" {
@@ -190,12 +190,12 @@ func TestPlayerProfileQueries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var gotIDs []int64
+	var gotIDs []string
 	for _, p := range matches {
 		gotIDs = append(gotIDs, p.MatchID)
 	}
 	m := f.matches
-	if want := []int64{m[4], m[3], m[2], m[1], m[0]}; !reflect.DeepEqual(gotIDs, want) {
+	if want := []string{m[4], m[3], m[2], m[1], m[0]}; !reflect.DeepEqual(gotIDs, want) {
 		t.Errorf("матчи: %v, ожидалось %v", gotIDs, want)
 	}
 	if p := matches[0]; p.Map != "de_nuke" || p.Ordinal != 2 || p.SessionDate != "2026-10-08" ||
@@ -204,7 +204,7 @@ func TestPlayerProfileQueries(t *testing.T) {
 	}
 
 	// период фильтрует все разбивки
-	period := MatchFilter{SessionIDs: []int64{f.s2.ID}}
+	period := MatchFilter{SessionIDs: []string{f.s2.ID}}
 	sessions, _ = f.s.PlayerSessions(ctx, pA, period)
 	maps, _ = f.s.PlayerMaps(ctx, pA, period)
 	matches, _ = f.s.PlayerMatches(ctx, pA, period)
@@ -226,7 +226,7 @@ func TestPlayerProfileQueries(t *testing.T) {
 func TestPlayerTotalsOnlyFailed(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 	m1, _ := s.AddMatch(ctx, sess.ID, "ok", "m.dem")
 	s.SaveMatchResult(ctx, m1.ID, MatchResult{Rounds: 1, Players: []stats.PlayerStats{{SteamID: pA, Name: "a"}}}, 1)
 	// матч, пересчёт которого упал, сохраняет результат и остаётся в выборке

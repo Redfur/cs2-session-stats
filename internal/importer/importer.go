@@ -50,11 +50,11 @@ type AddResult struct {
 	Status       string `json:"status"`
 	Platform     string `json:"platform,omitempty"`
 	ExternalID   string `json:"externalId,omitempty"`
-	ImportID     int64  `json:"importId,omitempty"`
-	SessionID    int64  `json:"sessionId,omitempty"`
+	ImportID     string `json:"importId,omitempty"`
+	SessionID    string `json:"sessionId,omitempty"`
 	SessionTitle string `json:"sessionTitle,omitempty"`
 	SessionDate  string `json:"sessionDate,omitempty"`
-	MatchID      int64  `json:"matchId,omitempty"`
+	MatchID      string `json:"matchId,omitempty"`
 	Ordinal      int    `json:"ordinal,omitempty"`
 	Error        string `json:"error,omitempty"`
 }
@@ -80,7 +80,7 @@ type Importer struct {
 
 	mu      sync.Mutex // текущая загрузка
 	current struct {
-		id, session int64
+		id, session string
 		cancel      context.CancelFunc
 	}
 }
@@ -141,16 +141,16 @@ func (im *Importer) Wake() {
 }
 
 // Cancel прерывает скачивание загрузки, если оно идёт.
-func (im *Importer) Cancel(importID int64) {
-	im.cancelIf(func(id, _ int64) bool { return id == importID })
+func (im *Importer) Cancel(importID string) {
+	im.cancelIf(func(id, _ string) bool { return id == importID })
 }
 
 // CancelSession прерывает скачивание загрузки сессии, если оно идёт.
-func (im *Importer) CancelSession(sessionID int64) {
-	im.cancelIf(func(_, session int64) bool { return session == sessionID })
+func (im *Importer) CancelSession(sessionID string) {
+	im.cancelIf(func(_, session string) bool { return session == sessionID })
 }
 
-func (im *Importer) cancelIf(match func(id, session int64) bool) {
+func (im *Importer) cancelIf(match func(id, session string) bool) {
 	im.mu.Lock()
 	defer im.mu.Unlock()
 	if im.current.cancel != nil && match(im.current.id, im.current.session) {
@@ -169,7 +169,7 @@ func (im *Importer) platform(name string) Platform {
 
 // Add проверяет ссылки из ввода и ставит новые загрузки в очередь. Результаты — в порядке ссылок,
 // загрузки создаются по времени игры. Ошибка возвращается только для ввода целиком.
-func (im *Importer) Add(ctx context.Context, sessionID int64, text string) ([]AddResult, error) {
+func (im *Importer) Add(ctx context.Context, sessionID string, text string) ([]AddResult, error) {
 	urls := SplitURLs(text)
 	if len(urls) == 0 {
 		return nil, ErrEmptyInput
@@ -245,7 +245,7 @@ func (im *Importer) Add(ctx context.Context, sessionID int64, text string) ([]Ad
 }
 
 // checkLink заполняет r, если матч уже есть, скачивается или его упавшую загрузку можно повторить.
-func (im *Importer) checkLink(ctx context.Context, sessionID int64, link Link, r *AddResult) error {
+func (im *Importer) checkLink(ctx context.Context, sessionID string, link Link, r *AddResult) error {
 	number, _ := strconv.ParseInt(link.ID, 10, 64)
 	src, err := im.Store.FindImportSource(ctx, sessionID, link.Platform.Name(), link.ID, number)
 	if err != nil {
@@ -268,7 +268,7 @@ func (im *Importer) checkLink(ctx context.Context, sessionID int64, link Link, r
 	return nil
 }
 
-func (im *Importer) fillSession(ctx context.Context, r *AddResult, sessionID int64) error {
+func (im *Importer) fillSession(ctx context.Context, r *AddResult, sessionID string) error {
 	s, err := im.Store.GetSession(ctx, sessionID)
 	if err != nil {
 		return err
@@ -321,7 +321,7 @@ func (im *Importer) process(parent context.Context, x store.Import) {
 	im.mu.Unlock()
 	defer func() {
 		im.mu.Lock()
-		im.current.id, im.current.session, im.current.cancel = 0, 0, nil
+		im.current.id, im.current.session, im.current.cancel = "", "", nil
 		im.mu.Unlock()
 	}()
 	// загрузку могли удалить между claim и регистрацией отмены
@@ -408,7 +408,7 @@ func (ir *idleReader) Read(p []byte) (int, error) {
 }
 
 // download скачивает файл демки во временный файл и возвращает его путь и имя для приёма.
-func (im *Importer) download(parent context.Context, importID int64, d Demo) (string, string, error) {
+func (im *Importer) download(parent context.Context, importID string, d Demo) (string, string, error) {
 	u, err := url.Parse(d.URL)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || !HostAllowed(u.Hostname(), im.Hosts) {
 		return "", "", errForeignHost

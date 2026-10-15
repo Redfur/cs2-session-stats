@@ -10,9 +10,9 @@ import (
 // MatchFilter — выборка матчей для агрегатов. В выборку всегда входят только матчи
 // с посчитанным результатом, включая пересчитываемые и матчи с неудачным пересчётом.
 type MatchFilter struct {
-	GroupID    int64    // только сессии этой группы; 0 — без ограничения (тесты и CLI)
+	GroupID    string   // только сессии этой группы; пусто — без ограничения (тесты и CLI)
 	From, To   string   // границы по дате сессии YYYY-MM-DD включительно; пустая строка — без границы
-	SessionIDs []int64  // только эти сессии; пусто — все
+	SessionIDs []string // только эти сессии; пусто — все
 	PlayerIDs  []uint64 // в PlayerTotals: только строки этих игроков
 	Together   bool     // только матчи, в которых сыграли все PlayerIDs
 }
@@ -21,7 +21,7 @@ type MatchFilter struct {
 func (f MatchFilter) where(m, s string) (string, []any) {
 	conds := []string{m + ".has_result = 1"}
 	var args []any
-	if f.GroupID != 0 {
+	if f.GroupID != "" {
 		conds = append(conds, s+".group_id = ?")
 		args = append(args, f.GroupID)
 	}
@@ -130,7 +130,7 @@ func (s *Store) PlayerTotals(ctx context.Context, f MatchFilter, minMatches int)
 			(SELECT mp2.name FROM match_players mp2
 			 JOIN matches m2 ON m2.id = mp2.match_id JOIN sessions s2 ON s2.id = m2.session_id
 			 WHERE mp2.steam_id = mp.steam_id AND ` + nameWhere + `
-			 ORDER BY s2.date DESC, s2.id DESC, m2.ordinal DESC LIMIT 1),
+			 ORDER BY s2.date DESC, s2.seq DESC, m2.ordinal DESC LIMIT 1),
 			` + sumColumns + `
 		` + fromPlayerMatches + `
 		WHERE ` + where + `
@@ -156,8 +156,8 @@ func (s *Store) PlayerTotals(ctx context.Context, f MatchFilter, minMatches int)
 }
 
 // SessionPlayers суммирует статистику игроков по матчам сессии с результатом.
-func (s *Store) SessionPlayers(ctx context.Context, sessionID int64) ([]PlayerTotal, error) {
-	return s.PlayerTotals(ctx, MatchFilter{SessionIDs: []int64{sessionID}}, 1)
+func (s *Store) SessionPlayers(ctx context.Context, sessionID string) ([]PlayerTotal, error) {
+	return s.PlayerTotals(ctx, MatchFilter{SessionIDs: []string{sessionID}}, 1)
 }
 
 // PlayerSession — статистика игрока за одну сессию.
@@ -174,7 +174,7 @@ func (s *Store) PlayerSessions(ctx context.Context, steamID uint64, f MatchFilte
 		`+fromPlayerMatches+`
 		WHERE mp.steam_id = ? AND `+where+`
 		GROUP BY s.id
-		ORDER BY s.date DESC, s.id DESC`, append([]any{int64(steamID)}, args...)...)
+		ORDER BY s.date DESC, s.seq DESC`, append([]any{int64(steamID)}, args...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -223,8 +223,8 @@ func (s *Store) PlayerMaps(ctx context.Context, steamID uint64, f MatchFilter) (
 
 // PlayerMatch — строка игрока в одном матче вместе с данными матча и сессии.
 type PlayerMatch struct {
-	MatchID      int64
-	SessionID    int64
+	MatchID      string
+	SessionID    string
 	SessionDate  string
 	SessionTitle string
 	Ordinal      int
@@ -244,7 +244,7 @@ func (s *Store) PlayerMatches(ctx context.Context, steamID uint64, f MatchFilter
 			mp.team, mp.result, `+counterColumns+`
 		`+fromPlayerMatches+`
 		WHERE mp.steam_id = ? AND `+where+`
-		ORDER BY s.date DESC, s.id DESC, m.ordinal DESC`, append([]any{int64(steamID)}, args...)...)
+		ORDER BY s.date DESC, s.seq DESC, m.ordinal DESC`, append([]any{int64(steamID)}, args...)...)
 	if err != nil {
 		return nil, err
 	}

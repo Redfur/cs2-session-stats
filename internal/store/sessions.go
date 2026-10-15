@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"slices"
+
+	"cs2stats/internal/ids"
 )
 
 type Session struct {
-	ID        int64  `json:"id"`
-	GroupID   int64  `json:"groupId"`
+	ID        string `json:"id"`
+	GroupID   string `json:"groupId"`
 	Date      string `json:"date"` // YYYY-MM-DD
 	Title     string `json:"title"`
 	CreatedAt string `json:"createdAt"`
@@ -23,32 +25,35 @@ type SessionSummary struct {
 }
 
 // CreateSession создаёт сессию в группе. Дату и существование группы проверяет вызывающий код.
-func (s *Store) CreateSession(ctx context.Context, groupID int64, date, title string) (Session, error) {
+func (s *Store) CreateSession(ctx context.Context, groupID string, date, title string) (Session, error) {
 	sess := Session{GroupID: groupID, Date: date, Title: title, CreatedAt: s.timestamp()}
-	res, err := s.db.ExecContext(ctx,
-		"INSERT INTO sessions (group_id, date, title, created_at) VALUES (?, ?, ?, ?)",
-		sess.GroupID, sess.Date, sess.Title, sess.CreatedAt)
+	err := insertWithNewID(ids.Session, "sessions.id", func(id string) error {
+		sess.ID = id
+		_, err := s.db.ExecContext(ctx,
+			"INSERT INTO sessions (id, seq, group_id, date, title, created_at) VALUES (?, "+nextSeq("sessions")+", ?, ?, ?, ?)",
+			sess.ID, sess.GroupID, sess.Date, sess.Title, sess.CreatedAt)
+		return err
+	})
 	if err != nil {
 		return Session{}, err
 	}
-	sess.ID, err = res.LastInsertId()
-	return sess, err
+	return sess, nil
 }
 
 // ListSessions возвращает сессии группы от новых к старым со сводкой по матчам.
-func (s *Store) ListSessions(ctx context.Context, groupID int64) ([]SessionSummary, error) {
+func (s *Store) ListSessions(ctx context.Context, groupID string) ([]SessionSummary, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+sessionColumns+`, count(m.id), coalesce(sum(m.status = ?), 0)
 		FROM sessions s LEFT JOIN matches m ON m.session_id = s.id
 		WHERE s.group_id = ?
 		GROUP BY s.id
-		ORDER BY s.date DESC, s.id DESC`, StatusFailed, groupID)
+		ORDER BY s.date DESC, s.seq DESC`, StatusFailed, groupID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	list := []SessionSummary{}
-	byID := map[int64]*SessionSummary{}
+	byID := map[string]*SessionSummary{}
 	for rows.Next() {
 		x := SessionSummary{Maps: []string{}}
 		if err := rows.Scan(append(sessionTargets(&x.Session), &x.MatchCount, &x.FailedCount)...); err != nil {
@@ -66,17 +71,16 @@ func (s *Store) ListSessions(ctx context.Context, groupID int64) ([]SessionSumma
 }
 
 // fillSessionMaps добавляет сессиям карты матчей с результатом в порядке номеров, без повторов.
-func (s *Store) fillSessionMaps(ctx context.Context, groupID int64, byID map[int64]*SessionSummary) error {
+func (s *Store) fillSessionMaps(ctx context.Context, groupID string, byID map[string]*SessionSummary) error {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT m.session_id, m.map FROM matches m JOIN sessions s ON s.id = m.session_id
-		WHERE m.has_result = 1 AND s.group_id = ? ORDER BY m.session_id, m.ordinal`, groupID)
+		WHERE m.has_result = 1 AND s.group_id = ? ORDER BY s.seq, m.ordinal`, groupID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id int64
-		var m string
+		var id, m string
 		if err := rows.Scan(&id, &m); err != nil {
 			return err
 		}
@@ -90,13 +94,13 @@ func (s *Store) fillSessionMaps(ctx context.Context, groupID int64, byID map[int
 }
 
 // sessionColumns — колонки Session по псевдониму s; читаются через sessionTargets.
-const sessionColumns = "s.id, coalesce(s.group_id, 0), s.date, s.title, s.created_at"
+const sessionColumns = "s.id, s.group_id, s.date, s.title, s.created_at"
 
 func sessionTargets(x *Session) []any {
 	return []any{&x.ID, &x.GroupID, &x.Date, &x.Title, &x.CreatedAt}
 }
 
-func (s *Store) GetSession(ctx context.Context, id int64) (Session, error) {
+func (s *Store) GetSession(ctx context.Context, id string) (Session, error) {
 	var x Session
 	err := s.db.QueryRowContext(ctx,
 		"SELECT "+sessionColumns+" FROM sessions s WHERE s.id = ?", id).
@@ -108,10 +112,10 @@ func (s *Store) GetSession(ctx context.Context, id int64) (Session, error) {
 }
 
 // UpdateSession меняет дату и название сессии. Дату валидирует вызывающий код.
-func (s *Store) UpdateSession(ctx context.Context, id int64, date, title string) (Session, error) {
+func (s *Store) UpdateSession(ctx context.Context, id string, date, title string) (Session, error) {
 	var x Session
 	err := s.db.QueryRowContext(ctx,
-		"UPDATE sessions SET date = ?, title = ? WHERE id = ? RETURNING id, coalesce(group_id, 0), date, title, created_at",
+		"UPDATE sessions SET date = ?, title = ? WHERE id = ? RETURNING id, group_id, date, title, created_at",
 		date, title, id).
 		Scan(sessionTargets(&x)...)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -122,7 +126,7 @@ func (s *Store) UpdateSession(ctx context.Context, id int64, date, title string)
 
 // DeleteSession удаляет сессию вместе с матчами и их статистикой и возвращает sha256
 // демок удалённых матчей: файлы удаляет вызывающий код после коммита.
-func (s *Store) DeleteSession(ctx context.Context, id int64) ([]string, error) {
+func (s *Store) DeleteSession(ctx context.Context, id string) ([]string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err

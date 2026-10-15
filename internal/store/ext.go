@@ -44,7 +44,7 @@ func extValues(c stats.ExtCounters) []any {
 }
 
 // saveExt заменяет расширенные данные матча в транзакции сохранения результата.
-func saveExt(ctx context.Context, tx *sql.Tx, matchID int64, e *stats.Ext) error {
+func saveExt(ctx context.Context, tx *sql.Tx, matchID string, e *stats.Ext) error {
 	for _, table := range []string{"match_player_ext", "match_player_weapons", "match_rounds", "match_kills", "match_clutches"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE match_id = ?", matchID); err != nil {
 			return err
@@ -109,8 +109,8 @@ func saveExt(ctx context.Context, tx *sql.Tx, matchID int64, e *stats.Ext) error
 // ExtRow — строка игрока в матче выборки для расширенной статистики. У матча без расширенных
 // данных Covered = false, а Ext нулевой; базовые K, D, A есть всегда.
 type ExtRow struct {
-	MatchID   int64
-	SessionID int64
+	MatchID   string
+	SessionID string
 	Ordinal   int
 	Map       string
 	Status    MatchStatus
@@ -141,7 +141,7 @@ func (s *Store) extRows(ctx context.Context, where string, args ...any) ([]ExtRo
 		`+fromPlayerMatches+`
 		LEFT JOIN match_player_ext x ON x.match_id = mp.match_id AND x.steam_id = mp.steam_id
 		WHERE `+where+`
-		ORDER BY s.date, s.id, m.ordinal`, args...)
+		ORDER BY s.date, s.seq, m.ordinal`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (s *Store) PlayerExtRows(ctx context.Context, steamID uint64, f MatchFilter
 }
 
 // SessionExtRows — строки всех игроков по матчам сессии с результатом.
-func (s *Store) SessionExtRows(ctx context.Context, sessionID int64) ([]ExtRow, error) {
+func (s *Store) SessionExtRows(ctx context.Context, sessionID string) ([]ExtRow, error) {
 	return s.extRows(ctx, "m.session_id = ? AND m.has_result = 1", sessionID)
 }
 
@@ -211,7 +211,7 @@ func (s *Store) PlayerClutches(ctx context.Context, steamID uint64, f MatchFilte
 }
 
 // SessionClutches — попытки клатча игроков сессии.
-func (s *Store) SessionClutches(ctx context.Context, sessionID int64) ([]ClutchCount, error) {
+func (s *Store) SessionClutches(ctx context.Context, sessionID string) ([]ClutchCount, error) {
 	return s.clutchCounts(ctx, "m.session_id = ?", sessionID)
 }
 
@@ -277,7 +277,7 @@ type MatchExt struct {
 
 // GetMatchExt возвращает расширенные данные матча. Covered = false, если у матча нет
 // результата или он получен версией без расширенной статистики.
-func (s *Store) GetMatchExt(ctx context.Context, matchID int64) (MatchExt, error) {
+func (s *Store) GetMatchExt(ctx context.Context, matchID string) (MatchExt, error) {
 	var e MatchExt
 	var durMs int64
 	err := s.db.QueryRowContext(ctx, `

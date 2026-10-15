@@ -20,8 +20,8 @@ const (
 func seedPlayers(t *testing.T, e *testEnv) (s1, s2 store.Session) {
 	t.Helper()
 	ctx := context.Background()
-	s1, _ = e.store.CreateSession(ctx, 1, "2026-10-01", "")
-	s2, _ = e.store.CreateSession(ctx, 1, "2026-10-08", "четверг")
+	s1, _ = e.store.CreateSession(ctx, e.gid, "2026-10-01", "")
+	s2, _ = e.store.CreateSession(ctx, e.gid, "2026-10-08", "четверг")
 	n := 0
 	add := func(sess store.Session, ids ...uint64) {
 		n++
@@ -55,7 +55,7 @@ func TestListPlayers(t *testing.T) {
 	get := func(query string) (int, playersResponse) {
 		t.Helper()
 		var resp playersResponse
-		code := e.do(t, "GET", "/api/groups/1/players?"+query, "", nil, &resp)
+		code := e.do(t, "GET", "/api/groups/"+e.gid+"/players?"+query, "", nil, &resp)
 		return code, resp
 	}
 
@@ -78,7 +78,7 @@ func TestListPlayers(t *testing.T) {
 	}{
 		{"from=2026-10-08", map[string]int{fmt.Sprint(steamA): 2, fmt.Sprint(steamB): 1}},
 		{"to=2026-10-01", map[string]int{fmt.Sprint(steamA): 1, fmt.Sprint(steamB): 1}},
-		{fmt.Sprintf("session=%d&session=%d", s1.ID, s2.ID), map[string]int{fmt.Sprint(steamA): 3, fmt.Sprint(steamB): 2}},
+		{fmt.Sprintf("session=%s&session=%s", s1.ID, s2.ID), map[string]int{fmt.Sprint(steamA): 3, fmt.Sprint(steamB): 2}},
 		{fmt.Sprintf("player=%d", steamA), map[string]int{fmt.Sprint(steamA): 3}},
 		{fmt.Sprintf("player=%d&player=%d&together=1", steamA, steamB), map[string]int{fmt.Sprint(steamA): 2, fmt.Sprint(steamB): 2}},
 		{"minMatches=3", map[string]int{fmt.Sprint(steamA): 3}},
@@ -114,7 +114,7 @@ func TestListPlayersValidation(t *testing.T) {
 		"from=2026-10-01&session=1",
 	} {
 		var resp map[string]string
-		if code := e.do(t, "GET", "/api/groups/1/players?"+q, "", nil, &resp); code != 400 || resp["error"] == "" {
+		if code := e.do(t, "GET", "/api/groups/"+e.gid+"/players?"+q, "", nil, &resp); code != 400 || resp["error"] == "" {
 			t.Errorf("%s: %d %v", q, code, resp)
 		}
 	}
@@ -123,7 +123,7 @@ func TestListPlayersValidation(t *testing.T) {
 func TestGetPlayer(t *testing.T) {
 	e := newTestEnv(t)
 	s1, s2 := seedPlayers(t, e)
-	path := fmt.Sprintf("/api/groups/1/players/%d", steamA)
+	path := fmt.Sprintf("/api/groups/"+e.gid+"/players/%d", steamA)
 
 	var p profileResponse
 	if code := e.do(t, "GET", path, "", nil, &p); code != 200 {
@@ -146,7 +146,7 @@ func TestGetPlayer(t *testing.T) {
 	// итоги профиля совпадают со строкой общей таблицы за тот же период
 	period := url.Values{"session": {fmt.Sprint(s2.ID)}}.Encode()
 	var list playersResponse
-	e.do(t, "GET", "/api/groups/1/players?"+period+fmt.Sprintf("&player=%d", steamA), "", nil, &list)
+	e.do(t, "GET", "/api/groups/"+e.gid+"/players?"+period+fmt.Sprintf("&player=%d", steamA), "", nil, &list)
 	e.do(t, "GET", path+"?"+period, "", nil, &p)
 	if len(list.Players) != 1 || fmt.Sprint(list.Players[0].Counters) != fmt.Sprint(p.Totals.Counters) ||
 		list.Players[0].Rating != p.Totals.Rating || p.Totals.Matches != 2 {
@@ -169,10 +169,10 @@ func TestGetPlayer(t *testing.T) {
 	}
 
 	var errResp map[string]string
-	if code := e.do(t, "GET", "/api/groups/1/players/76561198000000099", "", nil, &errResp); code != 404 {
+	if code := e.do(t, "GET", "/api/groups/"+e.gid+"/players/76561198000000099", "", nil, &errResp); code != 404 {
 		t.Errorf("неизвестный игрок: %d", code)
 	}
-	if code := e.do(t, "GET", "/api/groups/1/players/abc", "", nil, &errResp); code != 400 {
+	if code := e.do(t, "GET", "/api/groups/"+e.gid+"/players/abc", "", nil, &errResp); code != 400 {
 		t.Errorf("нечисловой SteamID: %d", code)
 	}
 	if code := e.do(t, "GET", path+"?from=x", "", nil, &errResp); code != 400 {
@@ -183,14 +183,14 @@ func TestGetPlayer(t *testing.T) {
 func TestListSessionsSummary(t *testing.T) {
 	e := newTestEnv(t)
 	_, s2 := seedPlayers(t, e)
-	empty, _ := e.store.CreateSession(context.Background(), 1, "2026-10-09", "")
+	empty, _ := e.store.CreateSession(context.Background(), e.gid, "2026-10-09", "")
 
 	// SteamID проверяется по сырому JSON: в number он потерял бы точность
 	var raw []map[string]any
-	if code := e.do(t, "GET", "/api/groups/1/sessions", "", nil, &raw); code != 200 || len(raw) != 3 {
+	if code := e.do(t, "GET", "/api/groups/"+e.gid+"/sessions", "", nil, &raw); code != 200 || len(raw) != 3 {
 		t.Fatalf("список: %d %v", code, raw)
 	}
-	if _, ok := raw[0]["best"]; ok || raw[0]["id"] != float64(empty.ID) {
+	if _, ok := raw[0]["best"]; ok || raw[0]["id"] != empty.ID {
 		t.Errorf("у сессии без результатов не должно быть best: %v", raw[0])
 	}
 	best, ok := raw[1]["best"].(map[string]any)
@@ -202,7 +202,7 @@ func TestListSessionsSummary(t *testing.T) {
 	}
 
 	var sess sessionResponse
-	e.do(t, "GET", fmt.Sprintf("/api/sessions/%d", s2.ID), "", nil, &sess)
+	e.do(t, "GET", fmt.Sprintf("/api/sessions/%s", s2.ID), "", nil, &sess)
 	first := sess.Players[0]
 	if best["steamId"] != first.SteamID || best["name"] != first.Name || best["rating"] != first.Rating {
 		t.Errorf("best %v не совпадает с первой строкой итогов %+v", best, first)

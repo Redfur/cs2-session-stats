@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func addImport(t *testing.T, s *Store, sessionID int64, ext string) Import {
+func addImport(t *testing.T, s *Store, sessionID string, ext string) Import {
 	t.Helper()
 	x, err := s.AddImport(context.Background(), sessionID, "https://cs2.fastcup.net/matches/"+ext, "fastcup", ext)
 	if err != nil {
@@ -21,7 +21,7 @@ func addImport(t *testing.T, s *Store, sessionID int64, ext string) Import {
 func TestImportQueue(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 
 	a := addImport(t, s, sess.ID, "1")
 	b := addImport(t, s, sess.ID, "2")
@@ -64,14 +64,14 @@ func TestImportQueue(t *testing.T) {
 	if err != nil || r.Status != ImportQueued || r.Error != "" || string(r.Results) != "[]" || r.FinishedAt != nil {
 		t.Fatalf("retry: %+v %v", r, err)
 	}
-	if _, err := s.RetryImport(ctx, 999); !errors.Is(err, ErrNotFound) {
+	if _, err := s.RetryImport(ctx, "none"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("retry неизвестной: %v", err)
 	}
 	s.FinishImport(ctx, b.ID, "ещё раз", json.RawMessage("null"))
 	if x, _ := s.GetImport(ctx, b.ID); string(x.Results) != "[]" {
 		t.Fatalf("null в итоге должен стать []: %s", x.Results)
 	}
-	if err := s.FinishImport(ctx, 999, "", nil); !errors.Is(err, ErrNotFound) {
+	if err := s.FinishImport(ctx, "none", "", nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("finish неизвестной: %v", err)
 	}
 }
@@ -79,7 +79,7 @@ func TestImportQueue(t *testing.T) {
 func TestListSessionImports(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 	queued := addImport(t, s, sess.ID, "1")
 	accepted := addImport(t, s, sess.ID, "2")
 	dup := addImport(t, s, sess.ID, "3")
@@ -92,11 +92,11 @@ func TestListSessionImports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ids []int64
+	var ids []string
 	for _, x := range list {
 		ids = append(ids, x.ID)
 	}
-	if want := []int64{queued.ID, dup.ID, failed.ID}; !reflect.DeepEqual(ids, want) {
+	if want := []string{queued.ID, dup.ID, failed.ID}; !reflect.DeepEqual(ids, want) {
 		t.Fatalf("видимые загрузки %v, ожидались %v", ids, want)
 	}
 }
@@ -104,7 +104,7 @@ func TestListSessionImports(t *testing.T) {
 func TestDeleteImportKeepsMatches(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 	x := addImport(t, s, sess.ID, "27802385")
 	m, err := s.AddMatchFrom(ctx, sess.ID, "sha", "a.dem", &MatchSource{ImportID: &x.ID, Platform: "fastcup", Number: 27802385, Map: 1, PlayedAt: time.Now()})
 	if err != nil {
@@ -116,10 +116,10 @@ func TestDeleteImportKeepsMatches(t *testing.T) {
 	if _, err := s.DeleteImport(ctx, x.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("повторное удаление: %v", err)
 	}
-	var importID *int64
+	var importID *string
 	s.db.QueryRow("SELECT import_id FROM matches WHERE id = ?", m.ID).Scan(&importID)
 	if importID != nil {
-		t.Fatalf("import_id не обнулён: %d", *importID)
+		t.Fatalf("import_id не обнулён: %s", *importID)
 	}
 	// источник матча переживает удаление загрузки
 	src, err := s.FindImportSource(ctx, sess.ID, "fastcup", "27802385", 27802385)
@@ -131,7 +131,7 @@ func TestDeleteImportKeepsMatches(t *testing.T) {
 func TestDeleteSessionDeletesImports(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 	x := addImport(t, s, sess.ID, "1")
 	if _, err := s.DeleteSession(ctx, sess.ID); err != nil {
 		t.Fatal(err)
@@ -144,8 +144,8 @@ func TestDeleteSessionDeletesImports(t *testing.T) {
 func TestFindImportSource(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
-	other, _ := s.CreateSession(ctx, 1, "2026-10-09", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
+	other, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-09", "")
 
 	src, err := s.FindImportSource(ctx, sess.ID, "fastcup", "1", 1)
 	if err != nil || src.Active != nil || src.Match != nil || src.Failed != nil {
@@ -198,7 +198,7 @@ func TestFindImportSource(t *testing.T) {
 }
 
 // sessionOrder возвращает sha матчей сессии по порядку и проверяет, что номера идут подряд с 1.
-func sessionOrder(t *testing.T, s *Store, sessionID int64) []string {
+func sessionOrder(t *testing.T, s *Store, sessionID string) []string {
 	t.Helper()
 	list, err := s.ListSessionMatches(context.Background(), sessionID)
 	if err != nil {
@@ -257,7 +257,7 @@ func TestAddMatchByPlayedAt(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			s := openTest(t)
-			sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+			sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 			for _, a := range c.adds {
 				if _, err := s.AddMatchFrom(ctx, sess.ID, a.sha, a.sha+".dem", a.src); err != nil {
 					t.Fatal(err)
@@ -274,11 +274,11 @@ func TestAddMatchByPlayedAt(t *testing.T) {
 func TestAddMatchByPlayedAtAfterReorder(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
-	sess, _ := s.CreateSession(ctx, 1, "2026-10-08", "")
+	sess, _ := s.CreateSession(ctx, mainGroup(t, s), "2026-10-08", "")
 	at := func(h int) time.Time { return time.Date(2026, 10, 8, h, 0, 0, 0, time.UTC) }
 	a, _ := s.AddMatchFrom(ctx, sess.ID, "A", "a", &MatchSource{Platform: "fastcup", Number: 1, Map: 1, PlayedAt: at(20)})
 	b, _ := s.AddMatchFrom(ctx, sess.ID, "B", "b", &MatchSource{Platform: "fastcup", Number: 2, Map: 1, PlayedAt: at(22)})
-	if _, err := s.ReorderMatches(ctx, sess.ID, []int64{b.ID, a.ID}); err != nil {
+	if _, err := s.ReorderMatches(ctx, sess.ID, []string{b.ID, a.ID}); err != nil {
 		t.Fatal(err)
 	}
 	// C (21:00): первый матч с более поздним временем — B на месте 1
